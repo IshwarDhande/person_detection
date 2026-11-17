@@ -1,0 +1,759 @@
+{
+  "metadata": {
+    "script_name": "camera_hardware_discovery.py",
+    "version": "1.0.0",
+    "generated_at_utc": "2026-11-16T12:18:10.775146+00:00"
+  },
+  "system_info": {
+    "timestamp_utc": "2026-11-16T12:18:10.775146+00:00",
+    "timestamp_local": "2026-11-16T17:48:10.775156+05:30",
+    "hostname": "01HW2570473",
+    "os_distribution": "Ubuntu 24.04.5 LTS",
+    "kernel_release": "7.0.0-42-generic",
+    "architecture": "x86_64",
+    "python_interpreter": "/home/eshwar/code/interrupt/venv/bin/python",
+    "python_version": "3.12.3",
+    "opencv": {
+      "installed": true,
+      "version": "5.0.0"
+    },
+    "relevant_packages": {
+      "torch": "2.13.0+cu130",
+      "torchvision": "0.28.0+cu130",
+      "ultralytics": "8.4.115",
+      "mediapipe": "0.10.14",
+      "scipy": "1.18.0",
+      "numpy": "2.5.1"
+    },
+    "system_tools": {
+      "v4l2-ctl": {
+        "available": true,
+        "path": "/usr/bin/v4l2-ctl",
+        "version": "v4l2-ctl 1.26.1"
+      },
+      "media-ctl": {
+        "available": true,
+        "path": "/usr/bin/media-ctl",
+        "version": "media-ctl 1.26.1"
+      },
+      "udevadm": {
+        "available": true,
+        "path": "/usr/bin/udevadm",
+        "version": "255"
+      },
+      "lsusb": {
+        "available": true,
+        "path": "/usr/bin/lsusb",
+        "version": "lsusb (usbutils) 017"
+      },
+      "lspci": {
+        "available": true,
+        "path": "/usr/bin/lspci",
+        "version": "lspci version 3.10.0"
+      }
+    }
+  },
+  "discovered_devices": [
+    {
+      "path": "/dev/video0",
+      "device_name": "video0",
+      "classification": "RGB Video Capture Device",
+      "permissions": {
+        "octal": "0660",
+        "filemode": "crw-rw----",
+        "uid": 0,
+        "gid": 44,
+        "user_acl_rw": true
+      },
+      "symlinks": {
+        "by-id": [
+          "/dev/v4l/by-id/usb-8SSC21K12297V1SR52D22YG_Integrated_RGB_Camera_01.00.00-video-index0"
+        ],
+        "by-path": [
+          "/dev/v4l/by-path/pci-0000:00:14.0-usbv2-0:6:1.0-video-index0",
+          "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6:1.0-video-index0"
+        ]
+      },
+      "sysfs": {
+        "exists": true,
+        "name": "Integrated RGB Camera: Integrat",
+        "index": "0",
+        "usb_vendor_id": "30c9",
+        "usb_product_id": "00a8",
+        "usb_manufacturer": "8SSC21K12297V1SR52D22YG",
+        "usb_product": "Integrated RGB Camera",
+        "usb_serial": "01.00.00",
+        "usb_speed": "480",
+        "bus_info": "3-6"
+      },
+      "v4l2_capabilities": {
+        "queried": true,
+        "driver_name": "uvcvideo",
+        "card_type": "Integrated RGB Camera: Integrat",
+        "bus_info": "usb-0000:00:14.0-6",
+        "driver_version": "7.0.14",
+        "capabilities_raw": "Unknown",
+        "device_caps_raw": "0x04200001",
+        "is_capture": true,
+        "is_meta_capture": true,
+        "controls": {
+          "brightness 0x00980900 (int)": "min=0 max=255 step=1 default=128 value=128 flags=0x00001000",
+          "contrast 0x00980901 (int)": "min=0 max=100 step=1 default=32 value=32 flags=0x00001000",
+          "saturation 0x00980902 (int)": "min=0 max=100 step=1 default=64 value=64 flags=0x00001000",
+          "hue 0x00980903 (int)": "min=-180 max=180 step=1 default=0 value=0 flags=0x00001000",
+          "white_balance_automatic 0x0098090c (bool)": "default=1 value=1",
+          "gamma 0x00980910 (int)": "min=90 max=150 step=1 default=120 value=120 flags=0x00001000",
+          "power_line_frequency 0x00980918 (menu)": "min=0 max=2 default=1 value=1 (50 Hz)",
+          "0": "Disabled",
+          "1": "Manual Mode",
+          "2": "60 Hz",
+          "white_balance_temperature 0x0098091a (int)": "min=2800 max=6500 step=1 default=4600 value=4600 flags=inactive, 0x00001000",
+          "sharpness 0x0098091b (int)": "min=0 max=7 step=1 default=3 value=3 flags=0x00001000",
+          "backlight_compensation 0x0098091c (int)": "min=0 max=2 step=1 default=1 value=1 flags=0x00001000",
+          "region_of_interest_rectangle 0x00981ae1 (unknown)": "type=107 value=unsupported payload type flags=has-payload, 0x00001000",
+          "region_of_interest_auto_ctrls 0x00981ae2 (bitmask)": "max=0x00000001 default=0x00000001 value=1 flags=0x00001000",
+          "auto_exposure 0x009a0901 (menu)": "min=0 max=3 default=3 value=3 (Aperture Priority Mode)",
+          "3": "Aperture Priority Mode",
+          "exposure_time_absolute 0x009a0902 (int)": "min=2 max=1250 step=1 default=156 value=156 flags=inactive, 0x00001000",
+          "exposure_dynamic_framerate 0x009a0903 (bool)": "default=0 value=1",
+          "privacy 0x009a0910 (bool)": "default=0 value=0 flags=read-only"
+        }
+      },
+      "supported_formats": [
+        {
+          "index": 0,
+          "pixel_format": "MJPG",
+          "description": "Motion-JPEG, compressed",
+          "resolutions": [
+            {
+              "width": 1920,
+              "height": 1080,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 1280,
+              "height": 720,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 960,
+              "height": 540,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 848,
+              "height": 480,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 640,
+              "height": 480,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 640,
+              "height": 360,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 352,
+              "height": 288,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 320,
+              "height": 240,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 320,
+              "height": 180,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "pixel_format": "YUYV",
+          "description": "YUYV 4:2:2",
+          "resolutions": [
+            {
+              "width": 1920,
+              "height": 1080,
+              "intervals": [
+                0.2
+              ],
+              "fps_list": [
+                5.0
+              ]
+            },
+            {
+              "width": 1280,
+              "height": 720,
+              "intervals": [
+                0.1
+              ],
+              "fps_list": [
+                10.0
+              ]
+            },
+            {
+              "width": 960,
+              "height": 540,
+              "intervals": [
+                0.067
+              ],
+              "fps_list": [
+                15.0
+              ]
+            },
+            {
+              "width": 848,
+              "height": 480,
+              "intervals": [
+                0.05
+              ],
+              "fps_list": [
+                20.0
+              ]
+            },
+            {
+              "width": 640,
+              "height": 480,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 640,
+              "height": 360,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 352,
+              "height": 288,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 320,
+              "height": 240,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            },
+            {
+              "width": 320,
+              "height": 180,
+              "intervals": [
+                0.033
+              ],
+              "fps_list": [
+                30.0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/dev/video1",
+      "device_name": "video1",
+      "classification": "Video Capture Device",
+      "permissions": {
+        "octal": "0660",
+        "filemode": "crw-rw----",
+        "uid": 0,
+        "gid": 44,
+        "user_acl_rw": true
+      },
+      "symlinks": {
+        "by-id": [
+          "/dev/v4l/by-id/usb-8SSC21K12297V1SR52D22YG_Integrated_RGB_Camera_01.00.00-video-index1"
+        ],
+        "by-path": [
+          "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6:1.0-video-index1",
+          "/dev/v4l/by-path/pci-0000:00:14.0-usbv2-0:6:1.0-video-index1"
+        ]
+      },
+      "sysfs": {
+        "exists": true,
+        "name": "Integrated RGB Camera: Integrat",
+        "index": "1",
+        "usb_vendor_id": "30c9",
+        "usb_product_id": "00a8",
+        "usb_manufacturer": "8SSC21K12297V1SR52D22YG",
+        "usb_product": "Integrated RGB Camera",
+        "usb_serial": "01.00.00",
+        "usb_speed": "480",
+        "bus_info": "3-6"
+      },
+      "v4l2_capabilities": {
+        "queried": true,
+        "driver_name": "uvcvideo",
+        "card_type": "Integrated RGB Camera: Integrat",
+        "bus_info": "usb-0000:00:14.0-6",
+        "driver_version": "7.0.14",
+        "capabilities_raw": "Unknown",
+        "device_caps_raw": "0x04a00000",
+        "is_capture": true,
+        "is_meta_capture": true,
+        "controls": {}
+      },
+      "supported_formats": []
+    },
+    {
+      "path": "/dev/video2",
+      "device_name": "video2",
+      "classification": "Greyscale/IR Video Capture Device",
+      "permissions": {
+        "octal": "0660",
+        "filemode": "crw-rw----",
+        "uid": 0,
+        "gid": 44,
+        "user_acl_rw": true
+      },
+      "symlinks": {
+        "by-id": [],
+        "by-path": [
+          "/dev/v4l/by-path/pci-0000:00:14.0-usbv2-0:6:1.2-video-index0",
+          "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6:1.2-video-index0"
+        ]
+      },
+      "sysfs": {
+        "exists": true,
+        "name": "Integrated RGB Camera: Integrat",
+        "index": "0",
+        "usb_vendor_id": "30c9",
+        "usb_product_id": "00a8",
+        "usb_manufacturer": "8SSC21K12297V1SR52D22YG",
+        "usb_product": "Integrated RGB Camera",
+        "usb_serial": "01.00.00",
+        "usb_speed": "480",
+        "bus_info": "3-6"
+      },
+      "v4l2_capabilities": {
+        "queried": true,
+        "driver_name": "uvcvideo",
+        "card_type": "Integrated RGB Camera: Integrat",
+        "bus_info": "usb-0000:00:14.0-6",
+        "driver_version": "7.0.14",
+        "capabilities_raw": "Unknown",
+        "device_caps_raw": "0x04200001",
+        "is_capture": true,
+        "is_meta_capture": true,
+        "controls": {
+          "region_of_interest_rectangle 0x00981ae1 (unknown)": "type=107 value=unsupported payload type flags=has-payload, 0x00001000",
+          "region_of_interest_auto_ctrls 0x00981ae2 (bitmask)": "max=0x00000001 default=0x00000001 value=1 flags=0x00001000",
+          "privacy 0x009a0910 (bool)": "default=0 value=0 flags=read-only"
+        }
+      },
+      "supported_formats": [
+        {
+          "index": 0,
+          "pixel_format": "GREY",
+          "description": "8-bit Greyscale",
+          "resolutions": [
+            {
+              "width": 640,
+              "height": 360,
+              "intervals": [
+                0.067,
+                0.033
+              ],
+              "fps_list": [
+                15.0,
+                30.0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/dev/video3",
+      "device_name": "video3",
+      "classification": "Video Capture Device",
+      "permissions": {
+        "octal": "0660",
+        "filemode": "crw-rw----",
+        "uid": 0,
+        "gid": 44,
+        "user_acl_rw": true
+      },
+      "symlinks": {
+        "by-id": [],
+        "by-path": [
+          "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6:1.2-video-index1",
+          "/dev/v4l/by-path/pci-0000:00:14.0-usbv2-0:6:1.2-video-index1"
+        ]
+      },
+      "sysfs": {
+        "exists": true,
+        "name": "Integrated RGB Camera: Integrat",
+        "index": "1",
+        "usb_vendor_id": "30c9",
+        "usb_product_id": "00a8",
+        "usb_manufacturer": "8SSC21K12297V1SR52D22YG",
+        "usb_product": "Integrated RGB Camera",
+        "usb_serial": "01.00.00",
+        "usb_speed": "480",
+        "bus_info": "3-6"
+      },
+      "v4l2_capabilities": {
+        "queried": true,
+        "driver_name": "uvcvideo",
+        "card_type": "Integrated RGB Camera: Integrat",
+        "bus_info": "usb-0000:00:14.0-6",
+        "driver_version": "7.0.14",
+        "capabilities_raw": "Unknown",
+        "device_caps_raw": "0x04a00000",
+        "is_capture": true,
+        "is_meta_capture": true,
+        "controls": {}
+      },
+      "supported_formats": []
+    }
+  ],
+  "benchmarks": {
+    "/dev/video0": {
+      "tested": true,
+      "dev_index": 0,
+      "dev_path": "/dev/video0",
+      "can_open": true,
+      "backend": "V4L2",
+      "initial_probe": {
+        "default_reported_width": 640.0,
+        "default_reported_height": 480.0,
+        "default_reported_fps": 30.0,
+        "first_frame_read_success": true,
+        "frame_shape": [
+          480,
+          640,
+          3
+        ],
+        "frame_dtype": "uint8",
+        "frame_channels": 3
+      },
+      "target_mode_test": {
+        "requested_fourcc": "MJPG",
+        "requested_resolution": "1280x720",
+        "requested_fps": 30,
+        "set_property_results": {
+          "fourcc": true,
+          "width": true,
+          "height": true,
+          "fps": true
+        },
+        "opencv_reported_resolution": "1280x720",
+        "opencv_reported_fps": 30.0,
+        "actual_frame_dimensions": "1280x720",
+        "matches_target_dimensions": true
+      },
+      "benchmark": {
+        "test_duration_seconds": 5.019,
+        "total_frames_read": 149,
+        "successful_frames": 149,
+        "failed_frames": 0,
+        "measured_fps": 29.69,
+        "inter_frame_timing_ms": {
+          "mean": 33.69,
+          "min": 22.14,
+          "max": 41.71,
+          "std_dev_jitter": 2.78
+        },
+        "stream_stable": true
+      },
+      "error": null
+    },
+    "/dev/video1": {
+      "tested": true,
+      "dev_index": 1,
+      "dev_path": "/dev/video1",
+      "can_open": true,
+      "backend": "FFMPEG",
+      "initial_probe": {
+        "default_reported_width": 640.0,
+        "default_reported_height": 360.0,
+        "default_reported_fps": 15.0,
+        "first_frame_read_success": true,
+        "frame_shape": [
+          360,
+          640,
+          3
+        ],
+        "frame_dtype": "uint8",
+        "frame_channels": 3
+      },
+      "target_mode_test": {
+        "requested_fourcc": "MJPG",
+        "requested_resolution": "1280x720",
+        "requested_fps": 30,
+        "set_property_results": {
+          "fourcc": false,
+          "width": false,
+          "height": false,
+          "fps": false
+        },
+        "opencv_reported_resolution": "640x360",
+        "opencv_reported_fps": 15.0,
+        "actual_frame_dimensions": "640x360",
+        "matches_target_dimensions": false
+      },
+      "benchmark": {
+        "test_duration_seconds": 5.055,
+        "total_frames_read": 75,
+        "successful_frames": 75,
+        "failed_frames": 0,
+        "measured_fps": 14.84,
+        "inter_frame_timing_ms": {
+          "mean": 67.4,
+          "min": 63.07,
+          "max": 69.14,
+          "std_dev_jitter": 1.52
+        },
+        "stream_stable": false
+      },
+      "error": null
+    },
+    "/dev/video2": {
+      "tested": true,
+      "dev_index": 2,
+      "dev_path": "/dev/video2",
+      "can_open": true,
+      "backend": "V4L2",
+      "initial_probe": {
+        "default_reported_width": 640.0,
+        "default_reported_height": 360.0,
+        "default_reported_fps": 30.0,
+        "first_frame_read_success": true,
+        "frame_shape": [
+          360,
+          640,
+          3
+        ],
+        "frame_dtype": "uint8",
+        "frame_channels": 3
+      },
+      "target_mode_test": {
+        "requested_fourcc": "MJPG",
+        "requested_resolution": "1280x720",
+        "requested_fps": 30,
+        "set_property_results": {
+          "fourcc": true,
+          "width": true,
+          "height": true,
+          "fps": true
+        },
+        "opencv_reported_resolution": "640x360",
+        "opencv_reported_fps": 30.0,
+        "actual_frame_dimensions": "640x360",
+        "matches_target_dimensions": false
+      },
+      "benchmark": {
+        "test_duration_seconds": 5.024,
+        "total_frames_read": 149,
+        "successful_frames": 149,
+        "failed_frames": 0,
+        "measured_fps": 29.66,
+        "inter_frame_timing_ms": {
+          "mean": 33.73,
+          "min": 31.39,
+          "max": 36.5,
+          "std_dev_jitter": 2.0
+        },
+        "stream_stable": true
+      },
+      "error": null
+    },
+    "/dev/video3": {
+      "tested": true,
+      "dev_index": 3,
+      "dev_path": "/dev/video3",
+      "can_open": true,
+      "backend": "FFMPEG",
+      "initial_probe": {
+        "default_reported_width": 1280.0,
+        "default_reported_height": 720.0,
+        "default_reported_fps": 10.0,
+        "first_frame_read_success": false,
+        "frame_shape": null,
+        "frame_dtype": null,
+        "frame_channels": 1
+      },
+      "target_mode_test": {
+        "requested_fourcc": "MJPG",
+        "requested_resolution": "1280x720",
+        "requested_fps": 30,
+        "set_property_results": {
+          "fourcc": false,
+          "width": false,
+          "height": false,
+          "fps": false
+        },
+        "opencv_reported_resolution": "1280x720",
+        "opencv_reported_fps": 10.0,
+        "actual_frame_dimensions": "1280x720",
+        "matches_target_dimensions": true
+      },
+      "benchmark": {
+        "test_duration_seconds": 5.052,
+        "total_frames_read": 50,
+        "successful_frames": 50,
+        "failed_frames": 0,
+        "measured_fps": 9.9,
+        "inter_frame_timing_ms": {
+          "mean": 101.17,
+          "min": 97.92,
+          "max": 107.26,
+          "std_dev_jitter": 2.15
+        },
+        "stream_stable": false
+      },
+      "error": null
+    }
+  },
+  "evidence_synthesis": {
+    "evidence_table": [
+      {
+        "property": "Camera Model / Name",
+        "finding": "Integrated RGB Camera (8SSC21K12297V1SR52D22YG)",
+        "status": "CONFIRMED",
+        "source": "sysfs & USB product descriptor (0x30c9:0x00a8)"
+      },
+      {
+        "property": "Connection Interface",
+        "finding": "Internal USB 2.0 (Bus info: usb-0000:00:14.0-6, Speed: 480 Mbps)",
+        "status": "CONFIRMED",
+        "source": "UVC Linux Driver & sysfs USB hierarchy"
+      },
+      {
+        "property": "Maximum Hardware Resolution",
+        "finding": "1920x1080 @ 30.0 FPS (MJPG)",
+        "status": "CONFIRMED",
+        "source": "v4l2-ctl discrete frame intervals"
+      },
+      {
+        "property": "1280x720 @ 30 FPS via MJPG",
+        "finding": "Delivered 1280x720 @ 29.69 FPS (Zero drops, Jitter: 2.78 ms)",
+        "status": "CONFIRMED (Hardware) & OBSERVED (Runtime)",
+        "source": "OpenCV V4L2 streaming benchmark"
+      },
+      {
+        "property": "1280x720 @ 30 FPS via YUYV (Uncompressed)",
+        "finding": "Unsupported at 30 FPS (Hardware limited to 10.0 FPS max due to USB 2.0 bandwidth)",
+        "status": "CONFIRMED",
+        "source": "v4l2-ctl format enumeration"
+      },
+      {
+        "property": "Camera height above floor",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Requires physical laser/tape measure in reception setup"
+      },
+      {
+        "property": "Camera optical pitch/tilt",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Requires floor ground plane calibration"
+      },
+      {
+        "property": "Camera yaw and roll",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Requires wall/corridor reference calibration"
+      },
+      {
+        "property": "Horizontal & Vertical FOV",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Requires checkerboard/ChArUco intrinsic calibration"
+      },
+      {
+        "property": "Focal length (fx, fy)",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Requires pinhole camera matrix computation"
+      },
+      {
+        "property": "Lens distortion coefficients",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Requires Brown-Conrady polynomial fitting (k1, k2, p1, p2)"
+      },
+      {
+        "property": "Head actuation / mobility",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Unknown if robot head can pitch/yaw during reception duty"
+      },
+      {
+        "property": "Mounting stability / vibration",
+        "finding": "UNKNOWN",
+        "status": "UNKNOWN",
+        "source": "Requires physical robot head inspection"
+      }
+    ],
+    "primary_device": "/dev/video0"
+  }
+}

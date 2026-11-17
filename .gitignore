@@ -1,0 +1,38 @@
+# python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# virtual environments
+.venv/
+venv/
+ENV/
+
+# environment variables and local settings
+.env
+.env.local
+
+# large model weights and checkpoints
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.weights
+checkpoints/
+
+# execution logs and scratch files
+logs/
+*.log
+scratch/
+.system_generated/
+
+# editor and os files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

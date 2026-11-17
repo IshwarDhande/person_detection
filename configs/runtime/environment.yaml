@@ -1,0 +1,25 @@
+# runtime environment configuration
+# vision-based first contact for reception social robot
+
+virtual_environment:
+  name: "interrupt-venv"
+  path: "/home/eshwar/code/interrupt/venv"
+  python_interpreter: "/home/eshwar/code/interrupt/venv/bin/python"
+  pip_path: "/home/eshwar/code/interrupt/venv/bin/pip"
+  python_version: "3.12.3"
+
+stack_packages:
+  deep_learning:
+    torch: "2.13.0+cu130"
+    torchvision: "0.28.0"
+  detection_and_tracking:
+    ultralytics: "8.4.115"
+    tracker_default: "bytetrack"
+  pose_and_orientation:
+    mediapipe: "0.10.14"
+  computer_vision:
+    opencv: "5.0.0"
+  numerics_and_filters:
+    numpy: "2.5.1"
+    scipy: "1.18.0"
+

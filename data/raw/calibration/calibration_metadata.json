@@ -1,0 +1,45 @@
+{
+  "project": "Vision-Based First Contact for Reception Social Robot",
+  "milestone": "M0 \u2014 Camera Calibration & Scene Framing",
+  "last_updated_utc": "2026-11-17T08:40:35.800764+00:00",
+  "camera_geometry": {
+    "lens_height_cm": 115.0,
+    "pitch_deg": 0.0,
+    "yaw_deg": 0.0,
+    "roll_deg": 0.0,
+    "mounting": "fixed",
+    "feet_visibility_at_1_5m": "not_visible",
+    "notes": "Tabletop robot head mounting at reception desk"
+  },
+  "images": [
+    {
+      "file_name": "scene_empty.png",
+      "relative_path": "raw/calibration/scene_inspection/scene_empty.png",
+      "capture_mode": "scene_inspection",
+      "stage": "empty",
+      "nominal_distance_m": 0.0,
+      "timestamp_utc": "2026-11-17T08:40:35.800713+00:00",
+      "monotonic_timestamp": 19258.694291719,
+      "resolution": {
+        "width": 1280,
+        "height": 720,
+        "channels": 3,
+        "dtype": "uint8"
+      },
+      "sharpness": 10.97,
+      "camera_geometry": {
+        "lens_height_cm": 115.0,
+        "pitch_deg": 0.0,
+        "yaw_deg": 0.0,
+        "roll_deg": 0.0,
+        "feet_visibility": "not_visible"
+      },
+      "privacy_status": {
+        "consent_verified": false,
+        "biometric_identity_retained": false,
+        "purpose": "First-contact framing and distance boundary calibration"
+      },
+      "operator_notes": "Empty reception scene (background baseline)"
+    }
+  ]
+}
