@@ -1,0 +1,2 @@
+"""Detection tests package."""
+

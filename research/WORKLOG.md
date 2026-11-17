@@ -1,103 +1,70 @@
 # Worklog
 
-Add new meaningful engineering sessions at the top. Record facts, actual commands/tests, outcomes, and the next concrete action.
+Add meaningful engineering sessions at the top when a worklog update is requested or required by the project convention. Record facts, actual commands/tests, outcomes, and the next concrete action. Do not invent execution results.
 
-## 2026-11-17 — Repository Cleanup & Governance Synchronization
-
-### Objective
-Remove empty directories and synchronize repository governance documentation to reflect the active filesystem structure.
-
-### Work performed
-- Recursively identified and safely removed 101 genuinely empty directories using bottom-up directory deletion.
-- Preserved all 16 active directories containing files and project assets (`configs/runtime`, `data/raw/calibration`, `docs/calibration`, `research`, `tools/calibration`).
-- Confirmed zero files deleted and zero non-empty directories modified.
-- Synchronized primary governance map `research/REPOSITORY_MAP.md` and repository overview `research/README.md` to document the active filesystem and clarify just-in-time introduction for planned subsystem packages.
-- Updated `research/STATUS.md`.
-
-### Results
-Repository tree streamlined from 117 to 13 directories. Zero empty leaf directories remain.
-
-### Open items
-Proceed with intrinsic calibration and initial perception module implementations.
-
-### Next action
-Collect intrinsic calibration dataset with physical target board.
-
-### Git reference
-Not recorded.
-
-## 2026-11-17 — M0: Camera Calibration Capture Utility Implemented & Framing Analyzed
+## 2026-11-17 — Implementation strategy reorganized into incremental milestones
 
 ### Objective
-Implement safe camera calibration image acquisition tooling, establish metadata tracking, and document framing observations and geometry constraints.
+Reorder implementation to produce small, demonstrable increments, starting with basic person detection on the laptop webcam and increasing complexity progressively.
 
-### Work performed
-- Implemented `tools/calibration/camera_capture_utility.py` supporting stream diagnostics, Mode A (scene inspection at empty, 1.0m, 1.5m, 2.0m, 2.5m), and Mode B (ChArUco / checkerboard multi-pose acquisition).
-- Enforced explicit `MJPG` 1280×720 @ 30 FPS configuration, dry-run by default, fail-closed consent certification for human subjects, and clean signal-based resource release.
-- Executed diagnostic validation against `/dev/video0`: verified 29.8 FPS, 30/30 frames in 1.007s, 2.7 ms jitter, exact `1280×720×3 uint8` format, and clean handle release.
-- Validated Mode A acquisition: saved empty scene baseline `scene_empty.png` and generated persistent metadata index `data/raw/calibration/calibration_metadata.json`.
-- Derived optical ray-tracing proof in `docs/calibration/m0_framing_and_calibration_report.md`: with $h = 1.15\text{ m}$ and $\theta = 0^\circ$, ground contact occurs at $\approx 2.78\text{ m}$, mathematically explaining why feet are occluded at the 1.5 m decision boundary. Formally ruled out feet-based ground homography in favor of upper-body/shoulder keypoint triangulation.
-- Authored comprehensive user guide in `docs/calibration/camera_capture_guide.md`.
+### Decisions recorded
+- Use the laptop built-in webcam for initial software development.
+- Defer robot camera integration and robot-specific physical calibration until the deployment milestone.
+- Implement one milestone at a time and require a working demo, relevant tests, evaluation evidence, and documented limitations before marking it complete.
+- Sequence: M1 basic person detection; M2 reliable single-person detection; M3 single-person tracking; M4 frame-level readiness perception; M5 temporal behaviour estimation; M6 complete single-person pipeline; M7 multi-person detection/tracking; M8 multi-person readiness/selection; M9 lifecycle integration; M10 robot deployment/calibration.
+- Split readiness development into frame-level Part A and temporal Part B.
+- Do not automatically proceed to the next milestone without review/authorization.
 
-### Results
-Tooling operational, metadata index active, framing constraints proved and architectural direction established.
+### Immediate next action
+Implement M1 only: live laptop webcam person detection with bounding box, confidence, FPS, inference latency, and clean shutdown.
 
-### Open items
-Acquire physical ChArUco / checkerboard pattern dataset; place floor tape marks at 1.0 m, 1.5 m, 2.0 m, 2.5 m for empirical distance function calibration.
+### Validation
+This entry records a planning decision only. It does not claim that M1 or any later milestone has been implemented or tested.
 
-### Next action
-Run intrinsic calibration session once physical board is presented.
-
-### Git reference
-Not recorded.
-
-## 2026-11-16 — M0 Batch 1: Embedded Camera Hardware Discovery Completed
+## 2026-11-17 — M0: Camera Capture Utility and Framing Inspection
 
 ### Objective
-Identify and characterize the robot's embedded camera hardware and verify the 1280×720 @ 30 FPS operational assumption.
+Implement safe camera image acquisition tooling and inspect the development camera framing.
 
-### Work performed
-- Implemented `tools/calibration/camera_hardware_discovery.py` to inspect V4L2, USB, sysfs, and OpenCV interfaces.
-- Executed hardware discovery and streaming benchmarks across all `/dev/video*` devices.
-- Identified primary RGB camera as Luxvisions Innotech Limited Integrated RGB Camera (`0x30c9:0x00a8`) driven by Linux `uvcvideo` over internal USB 2.0.
-- Classified `/dev/video0` as primary RGB capture device and `/dev/video2` as auxiliary 640×360 IR sensor; identified `/dev/video1` and `/dev/video3` as UVC metadata capture nodes.
-- Conducted 5-second OpenCV streaming benchmark at 1280×720 @ 30 FPS: measured 29.69 FPS, 0 failed frames, 2.78 ms jitter under MJPG format. Discovered that uncompressed YUYV format is hardware-limited to 10 FPS at 720p due to USB 2.0 bandwidth.
-- Generated comprehensive Markdown report `docs/calibration/m0_camera_hardware_inventory.md` and structured JSON inventory `docs/calibration/m0_camera_hardware_inventory.json`.
+### Work performed (as previously reported)
+- Implemented `tools/calibration/camera_capture_utility.py` supporting stream diagnostics, scene inspection, and intrinsic calibration pattern capture.
+- Configured capture for the reported development-camera mode: MJPG, 1280×720, approximately 30 FPS.
+- Reported a diagnostic stream test and an empty-scene capture.
+- Prepared calibration usage and framing documentation.
 
-### Results
-Camera hardware identified and 1280×720 @ 30 FPS verified under MJPG compression. Verdict: PASS.
+### Qualification
+The camera discovery/capture results refer to the camera used for laptop-based development. They do not establish the identity, stream capabilities, or geometry of the eventual robot camera. The reported feet-visibility observation applies only to the inspected development setup. Do not infer robot distance accuracy or a precise floor visibility cutoff from it.
 
 ### Open items
-M0 Batch 2: Physical desk mounting measurements ($h$, $\theta_{pitch}$) and camera intrinsic calibration (focal length, optical center, distortion).
+- Capture a person at controlled distances using the development webcam if useful for software prototyping.
+- Collect calibration-target images if intrinsic calibration is needed for the development camera.
+- Do not treat laptop calibration as a substitute for M10 robot calibration.
 
-### Next action
-Collect ChArUco / checkerboard frames for intrinsic camera matrix estimation.
+## 2026-11-16 — Camera hardware discovery
 
-### Git reference
-Not recorded.
+### Objective
+Identify and characterize the camera used during initial development and verify the nominal stream configuration.
+
+### Work performed (as previously reported)
+- Implemented `tools/calibration/camera_hardware_discovery.py`.
+- Reported the primary RGB capture device as a Luxvisions Innotech Integrated RGB Camera.
+- Reported a 1280×720 MJPG stream at approximately 30 FPS.
+- Reported that YUYV at 720p was limited to approximately 10 FPS.
+
+### Qualification
+These are development-camera findings from the prior discovery session. Robot hardware remains to be independently identified and tested.
 
 ## 2026-11-16 — Python runtime environment configured
 
 ### Objective
 Select and configure the Python execution environment for the project.
 
-### Work performed
-- Audited available virtual environments across pyenv and workspace projects.
-- Selected `/home/eshwar/code/interrupt/venv` (Python 3.12.3) containing required dependencies: Ultralytics (8.4.115), MediaPipe (0.10.14), PyTorch (2.13.0), OpenCV (5.0.0), and SciPy (1.18.0).
-- Created runtime configuration in `configs/runtime/environment.yaml`.
-- Created shell activation script `activate_env.sh` and root `.env`.
+### Work performed (as previously reported)
+- Selected `/home/eshwar/code/interrupt/venv` (Python 3.12.3) containing required dependencies: Ultralytics, MediaPipe, PyTorch, OpenCV, and SciPy.
+- Created runtime configuration and activation helpers.
 
-### Results
-Environment imports verified without errors. Project runtime bound to `/home/eshwar/code/interrupt/venv`.
-
-### Open items
-Proceed with pipeline component interface definitions and camera calibration data collection.
-
-### Next action
-Define typed observation and tracking schemas.
-
-### Git reference
-Not recorded.
+### Qualification
+Verify that this environment path and dependency versions remain valid before relying on them in a new implementation task.
 
 ## 2026-11-16 — Governance baseline prepared
 
@@ -105,18 +72,6 @@ Not recorded.
 Establish repository documentation and engineering workflow.
 
 ### Work performed
-- Consolidated project scope and current behavioural requirements.
+- Consolidated project scope and behavioural requirements.
 - Prepared project-entry documents, AI-agent instructions, architecture, repository map, and engineering standards.
 - Recorded initial engineering decisions.
-
-### Results
-Documentation baseline prepared. No implementation code, runtime dependencies, or model choices are asserted.
-
-### Open items
-Confirm actual repository tree; resolve camera calibration, HOLD/timer semantics, and event lifecycle details.
-
-### Next action
-Integrate these documents without overwriting existing requirements or research records.
-
-### Git reference
-Not recorded.
