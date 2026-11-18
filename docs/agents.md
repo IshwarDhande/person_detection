@@ -7,18 +7,16 @@
 - Preserve existing user changes. Never commit unless explicitly authorized.
 
 ## 2. Project references
-Governance files are under `research/`. Read this file first, then consult only relevant documents:
-- `research/STATUS.md` — current milestone and blockers.
-- `research/IMPLEMENTATION_ROADMAP.md` — milestone scope and exit criteria.
-- `research/ARCHITECTURE.md` — interfaces, data flow, or architecture changes.
-- `research/REPOSITORY_MAP.md` — file placement or repository navigation.
-- `research/ENGINEERING_STANDARDS.md` — coding/testing standards.
-- `research/WORKLOG.md` and requirement records — only when prior decisions or history matter.
+Project documentation files are under `docs/`. Read this file first, then consult only relevant documents:
+- `docs/status.md` — current milestone and blockers.
+- `docs/implementation_roadmap.md` — milestone scope and exit criteria.
+- `docs/architecture.md` — interfaces, data flow, or architecture changes.
+- `docs/worklog.md` and requirement records — only when prior decisions or history matter.
 
 Identify the actual repository root; do not assume proposed paths exist.
 
 ## 3. Project scope
-Build a vision-based first-contact subsystem for a stationary reception robot. Out of scope: speech/dialogue, gestures/actuation, emotion recognition, face recognition/biometric identity, and navigation. Do not create `research/RESEARCH_PLAN.md`.
+Build a vision-based first-contact subsystem for a stationary reception robot. Out of scope: speech/dialogue, gestures/actuation, emotion recognition, face recognition/biometric identity, and navigation. Do not create `docs/research_plan.md`.
 
 ## 4. Implementation order
 Follow the approved incremental roadmap:

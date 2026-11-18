@@ -80,8 +80,6 @@ No trigger under uncertain required evidence; approach is mandatory; readiness i
 
 ## References
 
-- [Architecture](research/ARCHITECTURE.md)
-- [Repository map](research/REPOSITORY_MAP.md)
-- [Engineering standards](research/ENGINEERING_STANDARDS.md)
-- [Worklog](WORKLOG.md)
-- [Incremental implementation roadmap](research/IMPLEMENTATION_ROADMAP.md)
+- [Architecture](architecture.md)
+- [Worklog](worklog.md)
+- [Incremental implementation roadmap](implementation_roadmap.md)

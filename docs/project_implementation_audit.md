@@ -1,6 +1,6 @@
 # Project Implementation Audit — Current State Assessment
 
-This report provides a formal assessment of the current state of the **Vision-Based First Contact for a Reception Social Robot** project (`/home/eshwar/code/detection`). It assesses all completed work, hardware characterization benchmarks, and existing code against the reorganized roadmap ([IMPLEMENTATION_ROADMAP.md](file:///home/eshwar/code/detection/research/IMPLEMENTATION_ROADMAP.md)).
+This report provides a formal assessment of the current state of the **Vision-Based First Contact for a Reception Social Robot** project (`/home/eshwar/code/detection`). It assesses all completed work, hardware characterization benchmarks, and existing code against the reorganized roadmap ([implementation_roadmap.md](file:///home/eshwar/code/detection/docs/implementation_roadmap.md)).
 
 ```text
 +---------------------------------------------------------------------------------------------------+
@@ -28,7 +28,7 @@ This report provides a formal assessment of the current state of the **Vision-Ba
 
 ## 1. Executive Summary
 
-1. **Roadmap Realignment**: The project has adopted a two-stage strategy ([IMPLEMENTATION_ROADMAP.md](file:///home/eshwar/code/detection/research/IMPLEMENTATION_ROADMAP.md)):
+1. **Roadmap Realignment**: The project has adopted a two-stage strategy ([implementation_roadmap.md](file:///home/eshwar/code/detection/docs/implementation_roadmap.md)):
    * **Stage A (M1–M9)**: Prototyping perception, tracking, pose-based localization, temporal movement filters, interaction readiness, and decision state machines using the workstation's built-in webcam (`/dev/video0`).
    * **Stage B (M10)**: Transferring and validating the pipeline on the physical reception robot (sensor mounting, ChArUco lens calibration, desk geometry, and environmental lighting).
 2. **Current Implementation Scope**: All functional software implemented to date resides in `tools/calibration/`. No perception modules, tracking algorithms, pose estimators, or state machine runners exist in `perception/`, `spatial_understanding/`, or `behaviour/` yet.
@@ -82,7 +82,7 @@ detection/
 │   │   └── m0_framing_and_calibration_report.md              # Optical framing & desk occlusion ray-tracing
 │   └── project_implementation_audit.md                       # Current state assessment report (this file)
 ├── README.md                                                 # Project top-level documentation
-├── research/                                                 # Research documents & governance files
+├── docs/                                                     # Project documentation, specifications & audit reports
 │   ├── AGENTS.md
 │   ├── ARCHITECTURE.md
 │   ├── CONTRIBUTING.md
@@ -195,7 +195,7 @@ All completed hardware discovery and acquisition experiments were performed usin
 | **M7** | Candidate Selection & Handover | No priority arbiter or selection logic | **Not Started** | Multi-person candidate management not implemented. |
 | **M8** | State Machine & Pipeline Integration | No FSM or pipeline orchestrator | **Not Started** | No lifecycle states or central runner implemented. |
 | **M9** | Event Interfaces & Downstream Handover | No event schema or dispatcher | **Not Started** | Downstream dispatch interfaces not implemented. |
-| **M10** | Robot Deployment & On-Hardware Tuning | Deferred to physical robot arrival | **Deferred** | Explicitly scoped to Stage B per [IMPLEMENTATION_ROADMAP.md](file:///home/eshwar/code/detection/research/IMPLEMENTATION_ROADMAP.md). |
+| **M10** | Robot Deployment & On-Hardware Tuning | Deferred to physical robot arrival | **Deferred** | Explicitly scoped to Stage B per [implementation_roadmap.md](file:///home/eshwar/code/detection/docs/implementation_roadmap.md). |
 
 ---
 

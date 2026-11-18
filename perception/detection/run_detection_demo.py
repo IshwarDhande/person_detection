@@ -51,7 +51,11 @@ if str(_REPO_ROOT) not in sys.path:
 import cv2
 import numpy as np
 
-from perception.detection.person_detector import PersonDetection, PersonDetector
+from perception.detection.person_detector import (
+    PersonDetection,
+    PersonDetector,
+    SinglePersonSmoother,
+)
 
 DEFAULT_CAMERA_DEVICE = "/dev/video0"
 DEFAULT_MODEL_PATH = "yolov8n.pt"
@@ -60,7 +64,8 @@ DEFAULT_CAPTURE_WIDTH = 1280
 DEFAULT_CAPTURE_HEIGHT = 720
 DEFAULT_CAPTURE_FPS = 30
 DEFAULT_FOURCC = "MJPG"
-WINDOW_NAME = "Vision-Based First Contact — M1 Basic Person Detection"
+DEFAULT_EMA_ALPHA = SinglePersonSmoother.DEFAULT_ALPHA
+WINDOW_NAME = "Vision-Based First Contact — M1/M2 Person Detection"
 
 
 def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
@@ -134,12 +139,25 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Run without displaying a graphical window (useful for automated profiling)",
     )
+    parser.add_argument(
+        "--ema-alpha",
+        type=float,
+        default=DEFAULT_EMA_ALPHA,
+        help=f"EMA coefficient in (0.0, 1.0] for single-person bounding-box smoothing (default: {DEFAULT_EMA_ALPHA})",
+    )
+    parser.add_argument(
+        "--no-smoothing",
+        action="store_true",
+        help="Disable single-person EMA bounding-box smoothing",
+    )
 
     parsed = parser.parse_args(args)
 
     # Validate argument bounds
     if not (0.0 <= parsed.conf <= 1.0):
         parser.error(f"--conf must be between 0.0 and 1.0, got {parsed.conf}")
+    if not (0.0 < parsed.ema_alpha <= 1.0):
+        parser.error(f"--ema-alpha must be in (0.0, 1.0], got {parsed.ema_alpha}")
     if parsed.width <= 0:
         parser.error(f"--width must be positive, got {parsed.width}")
     if parsed.height <= 0:
@@ -250,29 +268,41 @@ def render_detections(
     """
     # 1. Draw person bounding boxes and confidence labels
     for det in detections:
-        x1, y1, x2, y2 = [int(round(coord)) for coord in det.bbox_xyxy]
         conf_pct = det.confidence * 100.0
-        label = f"Person: {conf_pct:.1f}%"
 
-        # Bounding box (Bright Green)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        if det.is_smoothed and det.smoothed_bbox_xyxy is not None:
+            # Subtle raw bounding box (Cyan thin line)
+            rx1, ry1, rx2, ry2 = [int(round(coord)) for coord in det.bbox_xyxy]
+            cv2.rectangle(frame, (rx1, ry1), (rx2, ry2), (255, 200, 0), 1)
+
+            # Stabilized smoothed bounding box (Bright Green solid line)
+            sx1, sy1, sx2, sy2 = [int(round(coord)) for coord in det.smoothed_bbox_xyxy]
+            cv2.rectangle(frame, (sx1, sy1), (sx2, sy2), (0, 255, 0), 2)
+            label = f"Person (EMA): {conf_pct:.1f}%"
+            draw_x, draw_y = sx1, sy1
+        else:
+            # Unsmoothed detection (multi-person or smoothing disabled)
+            x1, y1, x2, y2 = [int(round(coord)) for coord in det.bbox_xyxy]
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            label = f"Person: {conf_pct:.1f}%"
+            draw_x, draw_y = x1, y1
 
         # Text label background plate
         (text_w, text_h), baseline = cv2.getTextSize(
             label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1
         )
-        label_y = max(y1 - 6, text_h + 4)
+        label_y = max(draw_y - 6, text_h + 4)
         cv2.rectangle(
             frame,
-            (x1, label_y - text_h - 4),
-            (x1 + text_w + 6, label_y + 2),
+            (draw_x, label_y - text_h - 4),
+            (draw_x + text_w + 6, label_y + 2),
             (0, 255, 0),
             cv2.FILLED,
         )
         cv2.putText(
             frame,
             label,
-            (x1 + 3, label_y - 2),
+            (draw_x + 3, label_y - 2),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             (0, 0, 0),
@@ -282,16 +312,23 @@ def render_detections(
 
     # 2. Render HUD Overlay Panel in top-left corner
     hud_x, hud_y = 12, 12
-    hud_w, hud_h = 320, 105
+    hud_w, hud_h = 340, 105
     overlay = frame.copy()
     cv2.rectangle(overlay, (hud_x, hud_y), (hud_x + hud_w, hud_y + hud_h), (25, 25, 25), cv2.FILLED)
     cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
     cv2.rectangle(frame, (hud_x, hud_y), (hud_x + hud_w, hud_y + hud_h), (80, 80, 80), 1)
 
+    if len(detections) == 1 and detections[0].is_smoothed:
+        det_label = "Detections: 1 person (EMA smoothed)"
+    elif len(detections) > 1:
+        det_label = f"Detections: {len(detections)} persons (multi-person, raw)"
+    else:
+        det_label = f"Detections: {len(detections)} persons"
+
     hud_lines = [
         f"App FPS: {app_fps:5.1f} (avg: {mean_app_fps:4.1f})",
         f"Inference: {latency_ms:5.1f} ms (avg: {mean_latency_ms:4.1f} ms)",
-        f"Detections: {len(detections)} persons",
+        det_label,
         f"Resolution: {actual_w}x{actual_h}",
     ]
 
@@ -315,6 +352,34 @@ def render_detections(
     return frame
 
 
+def compute_application_fps(
+    timestamps: Sequence[float], frame_count: Optional[int] = None
+) -> float:
+    """Calculate steady-state application FPS from frame completion timestamps.
+
+    Throughput is defined as:
+        FPS = (N - 1) / (tau_N - tau_1)
+    where tau_i are monotonic timestamps recorded at the completion of processed frames.
+
+    Args:
+        timestamps: Sequence of monotonically increasing timestamps (in seconds).
+        frame_count: Optional total frame count N across the timestamp window.
+                     If None, defaults to len(timestamps).
+
+    Returns:
+        Computed FPS as a float, or 0.0 if fewer than 2 frames or elapsed time <= 0.
+    """
+    if len(timestamps) < 2:
+        return 0.0
+    elapsed = timestamps[-1] - timestamps[0]
+    if elapsed <= 0.0:
+        return 0.0
+    n_frames = frame_count if frame_count is not None else len(timestamps)
+    if n_frames < 2:
+        return 0.0
+    return (n_frames - 1) / elapsed
+
+
 def run_detection_pipeline(
     camera: str = DEFAULT_CAMERA_DEVICE,
     model: str = DEFAULT_MODEL_PATH,
@@ -326,13 +391,18 @@ def run_detection_pipeline(
     device: Optional[str] = None,
     max_frames: Optional[int] = None,
     headless: bool = False,
+    ema_alpha: float = DEFAULT_EMA_ALPHA,
+    no_smoothing: bool = False,
 ) -> dict[str, Any]:
     """Execute the live detection demonstration loop.
+
+    Guarantees resource cleanup across detector, camera, and GUI windows on any
+    initialization failure, loop exception, or normal exit.
 
     Args:
         camera: Device path or index.
         model: Weights path.
-        conf: Confidence threshold.
+        conf: Confidence threshold (fixed at 0.5 for M1/M2).
         width: Requested capture width.
         height: Requested capture height.
         fps: Requested capture FPS.
@@ -340,16 +410,19 @@ def run_detection_pipeline(
         device: Torch compute device.
         max_frames: Optional frame limit.
         headless: Headless flag.
+        ema_alpha: EMA smoothing coefficient in (0.0, 1.0] for single person bounding box.
+        no_smoothing: If True, disables EMA bounding-box smoothing.
 
     Returns:
         Dictionary containing summary metrics and execution statistics.
     """
     print("=" * 78)
-    print(" Vision-Based First Contact — M1 Basic Person Detection Runner")
+    print(" Vision-Based First Contact — M1/M2 Person Detection Runner")
     print("=" * 78)
     print(f" Camera Device:       {camera}")
     print(f" Model Weights:       {model}")
-    print(f" Confidence Filter:   >= {conf:.2f}")
+    print(f" Confidence Filter:   >= {conf:.2f} (fixed)")
+    print(f" Smoothing (EMA):     {'Disabled' if no_smoothing else f'Enabled (alpha={ema_alpha:.2f})'}")
     print(f" Requested Capture:   {width}x{height} @ {fps} FPS ({fourcc})")
     print(f" Compute Device:      {device if device else 'Default (Auto)'}")
     print(f" Headless Mode:       {headless}")
@@ -357,41 +430,53 @@ def run_detection_pipeline(
         print(f" Frame Limit:         {max_frames} frames")
     print("-" * 78)
 
-    # 1. Initialize PersonDetector
-    print("Initializing PersonDetector...")
-    detector = PersonDetector(
-        model_path=model,
-        confidence_threshold=conf,
-        device=device,
-    )
-    print("PersonDetector initialized successfully.")
+    detector: Optional[PersonDetector] = None
+    cap: Optional[cv2.VideoCapture] = None
+    window_created: bool = False
 
-    # 2. Open Camera Stream
-    print(f"Opening camera stream on '{camera}'...")
-    cap, actual_w, actual_h, actual_fps = open_camera_stream(
-        device_arg=camera,
-        width=width,
-        height=height,
-        fps=fps,
-        fourcc=fourcc,
-    )
-    print(f"Camera opened. Negotiated stream: {actual_w}x{actual_h} (reported {actual_fps:.1f} FPS)")
+    session_start_time = time.perf_counter()
 
-    # 3. Setup metrics tracking
+    # Metrics tracking
     frame_count = 0
     total_detections_count = 0
     latencies_ms: list[float] = []
     loop_timestamps: deque[float] = deque(maxlen=30)
+    first_frame_timestamp: Optional[float] = None
+    last_frame_timestamp: Optional[float] = None
     consecutive_read_failures = 0
     MAX_CONSECUTIVE_FAILURES = 10
-
-    start_wall_time = time.perf_counter()
-
-    if not headless:
-        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE)
-        print("Live preview active. Press 'q' or 'Esc' to exit.")
+    actual_w = 0
+    actual_h = 0
+    actual_fps = 0.0
 
     try:
+        # 1. Initialize Smoother and PersonDetector
+        smoother = None if no_smoothing else SinglePersonSmoother(alpha=ema_alpha)
+        print("Initializing PersonDetector...")
+        detector = PersonDetector(
+            model_path=model,
+            confidence_threshold=conf,
+            device=device,
+            smoother=smoother,
+        )
+        print("PersonDetector initialized successfully.")
+
+        # 2. Open Camera Stream
+        print(f"Opening camera stream on '{camera}'...")
+        cap, actual_w, actual_h, actual_fps = open_camera_stream(
+            device_arg=camera,
+            width=width,
+            height=height,
+            fps=fps,
+            fourcc=fourcc,
+        )
+        print(f"Camera opened. Negotiated stream: {actual_w}x{actual_h} (reported {actual_fps:.1f} FPS)")
+
+        if not headless:
+            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE)
+            window_created = True
+            print("Live preview active. Press 'q' or 'Esc' to exit.")
+
         while True:
             # Check frame cap
             if max_frames is not None and frame_count >= max_frames:
@@ -412,7 +497,7 @@ def run_detection_pipeline(
 
             consecutive_read_failures = 0
 
-            # B. Run detection and measure inference latency
+            # B. Run detection and measure inference latency (isolated from loop FPS)
             t_infer_start = time.perf_counter()
             detections = detector.detect(frame)
             t_infer_end = time.perf_counter()
@@ -422,17 +507,24 @@ def run_detection_pipeline(
             total_detections_count += len(detections)
             frame_count += 1
 
-            # C. Track application loop timestamps for FPS
-            t_now = time.perf_counter()
-            loop_timestamps.append(t_now)
+            # C. Track application throughput timestamps (starts after first frame)
+            t_completed = time.perf_counter()
+            loop_timestamps.append(t_completed)
+            last_frame_timestamp = t_completed
+            if first_frame_timestamp is None:
+                first_frame_timestamp = t_completed
 
-            if len(loop_timestamps) > 1:
-                app_fps = (len(loop_timestamps) - 1) / (loop_timestamps[-1] - loop_timestamps[0])
+            # Rolling FPS over recent frames
+            app_fps = compute_application_fps(loop_timestamps)
+
+            # Cumulative steady-state FPS over all processed frames (excluding startup/warmup)
+            if frame_count > 1 and first_frame_timestamp is not None:
+                mean_app_fps = compute_application_fps(
+                    [first_frame_timestamp, t_completed], frame_count=frame_count
+                )
             else:
-                app_fps = 0.0
+                mean_app_fps = 0.0
 
-            total_elapsed = t_now - start_wall_time
-            mean_app_fps = (frame_count - 1) / total_elapsed if total_elapsed > 0 and frame_count > 1 else 0.0
             mean_lat_ms = float(np.mean(latencies_ms)) if latencies_ms else 0.0
 
             # D. Render and display
@@ -469,18 +561,40 @@ def run_detection_pipeline(
                     )
 
     finally:
-        # Resource cleanup
+        # Resource cleanup - guaranteed execution for all acquired resources
         print("-" * 78)
         print("Releasing camera and graphics resources...")
         if cap is not None:
-            cap.release()
-        if not headless:
-            cv2.destroyAllWindows()
+            try:
+                cap.release()
+            except Exception:
+                pass
+            cap = None
+        if window_created:
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
+            window_created = False
         if detector is not None:
-            detector.close()
+            try:
+                detector.close()
+            except Exception:
+                pass
+            detector = None
 
-    total_time = time.perf_counter() - start_wall_time
-    final_fps = (frame_count - 1) / total_time if total_time > 0 and frame_count > 1 else 0.0
+    total_session_time = time.perf_counter() - session_start_time
+
+    # Steady-state application throughput calculation
+    if frame_count > 1 and first_frame_timestamp is not None and last_frame_timestamp is not None:
+        steady_state_duration = last_frame_timestamp - first_frame_timestamp
+        final_fps = compute_application_fps(
+            [first_frame_timestamp, last_frame_timestamp], frame_count=frame_count
+        )
+    else:
+        steady_state_duration = 0.0
+        final_fps = 0.0
+
     mean_latency = float(np.mean(latencies_ms)) if latencies_ms else 0.0
     min_latency = float(np.min(latencies_ms)) if latencies_ms else 0.0
     max_latency = float(np.max(latencies_ms)) if latencies_ms else 0.0
@@ -488,22 +602,25 @@ def run_detection_pipeline(
     p95_latency = float(np.percentile(latencies_ms, 95)) if latencies_ms else 0.0
 
     print("=" * 78)
-    print(" M1 EXECUTION & PERFORMANCE BASELINE SUMMARY")
+    print(" M1/M2 EXECUTION & PERFORMANCE BASELINE SUMMARY")
     print("=" * 78)
-    print(f" Processed Frames:            {frame_count}")
-    print(f" Total Duration:              {total_time:.2f} s")
-    print(f" Mean Application FPS:        {final_fps:.2f} FPS")
-    print(f" Mean Inference Latency:      {mean_latency:.2f} ms")
-    print(f" Median (P50) Latency:        {p50_latency:.2f} ms")
-    print(f" 95th Percentile (P95):       {p95_latency:.2f} ms")
-    print(f" Latency Min / Max:           {min_latency:.2f} ms / {max_latency:.2f} ms")
-    print(f" Total Person Detections:     {total_detections_count}")
-    print(f" Stream Resolution:           {actual_w}x{actual_h}")
+    print(f" Processed Frames:                  {frame_count}")
+    print(f" Steady-State Loop Duration:        {steady_state_duration:.2f} s (frame 1 to {frame_count})")
+    print(f" Total Session Duration:            {total_session_time:.2f} s (including initialization)")
+    print(f" Mean Application Throughput:       {final_fps:.2f} FPS (steady-state loop)")
+    print(f" Camera Stream Negotiated FPS:      {actual_fps:.1f} FPS (sensor hardware target)")
+    print(f" Mean Inference Latency:            {mean_latency:.2f} ms (per-frame detect() call)")
+    print(f" Median (P50) Latency:              {p50_latency:.2f} ms")
+    print(f" 95th Percentile (P95):             {p95_latency:.2f} ms")
+    print(f" Latency Min / Max:                 {min_latency:.2f} ms / {max_latency:.2f} ms")
+    print(f" Total Person Detections:           {total_detections_count}")
+    print(f" Stream Resolution:                 {actual_w}x{actual_h}")
     print("=" * 78)
 
     return {
         "processed_frames": frame_count,
-        "total_duration_s": total_time,
+        "steady_state_duration_s": steady_state_duration,
+        "total_session_time_s": total_session_time,
         "mean_app_fps": final_fps,
         "mean_inference_latency_ms": mean_latency,
         "p50_inference_latency_ms": p50_latency,
@@ -513,6 +630,8 @@ def run_detection_pipeline(
         "total_person_detections": total_detections_count,
         "frame_width": actual_w,
         "frame_height": actual_h,
+        "smoothing_enabled": not no_smoothing,
+        "ema_alpha": ema_alpha if not no_smoothing else None,
     }
 
 
@@ -531,6 +650,8 @@ def main() -> None:
             device=args.device,
             max_frames=args.max_frames,
             headless=args.headless,
+            ema_alpha=args.ema_alpha,
+            no_smoothing=args.no_smoothing,
         )
     except KeyboardInterrupt:
         print("\nInterrupted by user (Ctrl+C). Terminating cleanly.")

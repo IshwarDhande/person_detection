@@ -17,14 +17,14 @@ These are requirements, not validated performance claims. Camera geometry, thres
 ## Repository structure
 - `configs/runtime/`: runtime environment configuration (`environment.yaml`).
 - `data/raw/calibration/`: raw camera calibration frames and scene inspection baselines.
+- `docs/`: architecture specifications, milestone guides, and documentation records.
 - `docs/calibration/`: hardware surveys, framing reports, and capture guides.
-- `research/`: engineering requirements, architecture, standards, and decision records.
 - `tools/calibration/`: hardware discovery and calibration capture utilities.
 
-Planned subsystem directories (`perception/`, `spatial_understanding/`, `behaviour_understanding/`, `decision_engine/`, `lifecycle_management/`, `integration/`, `runtime/`, `evaluation/`, `experiments/`, `tests/`, `checkpoints/`, `logs/`, `deployment/`) are introduced just-in-time as their implementation and test code is developed. See `research/REPOSITORY_MAP.md` and `research/ARCHITECTURE.md`.
+Planned subsystem directories (`perception/`, `spatial_understanding/`, `behaviour_understanding/`, `decision_engine/`, `lifecycle_management/`, `integration/`, `runtime/`, `evaluation/`, `experiments/`, `tests/`, `checkpoints/`, `logs/`, `deployment/`) are introduced just-in-time as their implementation and test code is developed. See `docs/architecture.md`.
 
 ## Development state
-Requirements and architecture are being consolidated. Detector, tracker, pose estimator, localisation method, and runtime stack are provisional until evaluated on the target hardware. See `STATUS.md`.
+Requirements and architecture are being consolidated. Detector, tracker, pose estimator, localisation method, and runtime stack are provisional until evaluated on the target hardware. See `docs/status.md`.
 
 ## Engineering principles
 Keep modules replaceable and decision logic model-independent. Use timestamps, explicit uncertainty, fail-closed triggering, offline replay, deterministic tests, and traceable configuration/model/data provenance. Do not commit private reception video or large artifacts without approval.

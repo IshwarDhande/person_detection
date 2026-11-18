@@ -234,6 +234,31 @@ class TestPersonDetectorInference(unittest.TestCase):
         self.assertEqual(results[0].class_id, 0)
         self.assertEqual(results[0].bbox_xyxy, (10.0, 20.0, 100.0, 200.0))
 
+    def test_strict_class_id_validation(self) -> None:
+        """Verify strict class-ID filtering: 0.0 accepted; 0.5, 1.0, NaN, Inf rejected."""
+        fake_boxes = FakeBoxes(
+            xyxy=[
+                [10.0, 20.0, 100.0, 200.0],  # 0.0 -> Valid Person (class 0)
+                [15.0, 25.0, 50.0, 60.0],    # 0.5 -> Non-integer class (must reject, never round to 0)
+                [20.0, 30.0, 70.0, 80.0],    # 1.0 -> Non-person class (bicycle)
+                [30.0, 40.0, 90.0, 100.0],   # NaN -> Malformed class (must reject safely)
+                [40.0, 50.0, 110.0, 120.0],  # +Inf -> Malformed class (must reject safely)
+                [50.0, 60.0, 130.0, 140.0],  # -Inf -> Malformed class (must reject safely)
+            ],
+            conf=[0.90, 0.95, 0.88, 0.85, 0.85, 0.85],
+            cls=[0.0, 0.5, 1.0, float("nan"), float("inf"), float("-inf")],
+        )
+        self.mock_model_instance.predict.return_value = [FakeResult(fake_boxes)]
+
+        dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        results = self.detector.detect(dummy_frame)
+
+        # Only the exact class 0.0 should survive
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].class_id, 0)
+        self.assertEqual(results[0].bbox_xyxy, (10.0, 20.0, 100.0, 200.0))
+        self.assertAlmostEqual(results[0].confidence, 0.90, places=5)
+
     def test_below_threshold_detections_filtered_out(self) -> None:
         """Verify detections below confidence_threshold are excluded."""
         fake_boxes = FakeBoxes(
