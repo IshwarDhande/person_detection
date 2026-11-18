@@ -172,6 +172,134 @@ class TestKalmanFilterUpdate(unittest.TestCase):
         self.assertGreater(d2_large, d2_small)
 
 
+class TestKalmanFilterMathematicalStructure(unittest.TestCase):
+    """Detailed mathematical verification of matrices, models, and numerical validity."""
+
+    def test_state_transition_matrix_structure(self) -> None:
+        """Verify F(dt) structure: I_4 top-left, dt*I_4 top-right, 0 bottom-left, I_4 bottom-right."""
+        kf = ConstantVelocityKalmanFilter8D((100.0, 100.0, 200.0, 200.0))
+        dt = 0.05
+        F = kf._build_transition_matrix(dt)
+
+        self.assertEqual(F.shape, (8, 8))
+        # Top-left and bottom-right 4x4 blocks must be identity
+        np.testing.assert_allclose(F[:4, :4], np.eye(4), atol=1e-12)
+        np.testing.assert_allclose(F[4:, 4:], np.eye(4), atol=1e-12)
+        # Bottom-left 4x4 block must be zeros
+        np.testing.assert_allclose(F[4:, :4], np.zeros((4, 4)), atol=1e-12)
+        # Top-right 4x4 block must be dt * I_4
+        np.testing.assert_allclose(F[:4, 4:], dt * np.eye(4), atol=1e-12)
+
+        # Explicit state pair verification: (pos, vel)
+        # cx <-> vx at (0, 4)
+        self.assertAlmostEqual(F[0, 4], dt)
+        # cy <-> vy at (1, 5)
+        self.assertAlmostEqual(F[1, 5], dt)
+        # w <-> vw at (2, 6)
+        self.assertAlmostEqual(F[2, 6], dt)
+        # h <-> vh at (3, 7)
+        self.assertAlmostEqual(F[3, 7], dt)
+
+    def test_process_noise_matrix_structure_and_cwna_blocks(self) -> None:
+        """Verify Q(dt) CWNA blocks match state pairs and matrix is symmetric positive-definite."""
+        kf = ConstantVelocityKalmanFilter8D(
+            (100.0, 100.0, 200.0, 200.0),
+            process_noise_pos=80.0,
+            process_noise_size=20.0,
+        )
+        dt = 0.1
+        Q = kf._build_process_noise(dt)
+
+        self.assertEqual(Q.shape, (8, 8))
+        # Must be symmetric
+        np.testing.assert_allclose(Q, Q.T, atol=1e-12)
+
+        # CWNA block values: dt^3/3, dt^2/2, dt
+        dt2 = dt * dt
+        dt3 = dt2 * dt
+        q_pos_var = 80.0 ** 2
+        q_size_var = 20.0 ** 2
+
+        # cx <-> vx at (0, 4)
+        self.assertAlmostEqual(Q[0, 0], q_pos_var * (dt3 / 3.0))
+        self.assertAlmostEqual(Q[0, 4], q_pos_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[4, 0], q_pos_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[4, 4], q_pos_var * dt)
+
+        # cy <-> vy at (1, 5)
+        self.assertAlmostEqual(Q[1, 1], q_pos_var * (dt3 / 3.0))
+        self.assertAlmostEqual(Q[1, 5], q_pos_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[5, 1], q_pos_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[5, 5], q_pos_var * dt)
+
+        # w <-> vw at (2, 6)
+        self.assertAlmostEqual(Q[2, 2], q_size_var * (dt3 / 3.0))
+        self.assertAlmostEqual(Q[2, 6], q_size_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[6, 2], q_size_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[6, 6], q_size_var * dt)
+
+        # h <-> vh at (3, 7)
+        self.assertAlmostEqual(Q[3, 3], q_size_var * (dt3 / 3.0))
+        self.assertAlmostEqual(Q[3, 7], q_size_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[7, 3], q_size_var * (dt2 / 2.0))
+        self.assertAlmostEqual(Q[7, 7], q_size_var * dt)
+
+        # Eigenvalues must be non-negative
+        eigvals = np.linalg.eigvalsh(Q)
+        self.assertTrue(np.all(eigvals >= -1e-12))
+
+    def test_measurement_matrix_and_innovation_covariance(self) -> None:
+        """Verify H matrix extracts [cx, cy, w, h] and S = H P^- H^T + R."""
+        kf = ConstantVelocityKalmanFilter8D((100.0, 100.0, 200.0, 200.0))
+        kf.predict(dt=0.033)
+
+        # H is 4x8: [I_4, 0_4]
+        self.assertEqual(kf.H.shape, (4, 8))
+        np.testing.assert_allclose(kf.H[:, :4], np.eye(4), atol=1e-12)
+        np.testing.assert_allclose(kf.H[:, 4:], np.zeros((4, 4)), atol=1e-12)
+
+        # S = H P^- H^T + R
+        S_expected = kf.H @ kf._P_pred @ kf.H.T + kf.R
+        S_actual = kf.innovation_covariance()
+        np.testing.assert_allclose(S_actual, S_expected, atol=1e-12)
+
+    def test_mahalanobis_gate_uses_same_innovation_covariance(self) -> None:
+        """Verify mahalanobis_distance_squared strictly computes y^T S^(-1) y with S = innovation_covariance()."""
+        kf = ConstantVelocityKalmanFilter8D((100.0, 100.0, 200.0, 200.0))
+        kf.predict(dt=0.033)
+
+        cand_box = (110.0, 105.0, 210.0, 205.0)
+        d_m_sq = kf.mahalanobis_distance_squared(cand_box)
+
+        # Manual computation
+        z = kf.bbox_to_z(cand_box)
+        y = z - (kf.H @ kf._x_pred)
+        S = kf.innovation_covariance()
+        d_m_sq_manual = float(y.T @ np.linalg.inv(S) @ y)
+
+        self.assertAlmostEqual(d_m_sq, d_m_sq_manual, places=7)
+
+    def test_covariance_numerical_stability_across_multiple_steps(self) -> None:
+        """Verify covariance P remains symmetric and positive-definite across 100 predict/update steps."""
+        kf = ConstantVelocityKalmanFilter8D((100.0, 100.0, 200.0, 200.0))
+        for step in range(100):
+            kf.predict(dt=0.033)
+            # Simulated measurement with small drift
+            meas_box = (
+                100.0 + step * 0.5,
+                100.0 + step * 0.3,
+                200.0 + step * 0.5,
+                200.0 + step * 0.3,
+            )
+            kf.update(meas_box)
+
+            # Symmetry check
+            np.testing.assert_allclose(kf.P, kf.P.T, atol=1e-9)
+            # Positive-definiteness check
+            min_eig = float(np.min(np.linalg.eigvalsh(kf.P)))
+            self.assertGreater(min_eig, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
 

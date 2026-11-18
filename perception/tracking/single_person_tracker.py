@@ -247,12 +247,18 @@ class SinglePersonTracker:
         """Track ID that will be assigned to the next initialized track."""
         return self._next_track_id
 
-    def reset(self) -> None:
-        """Reset tracker state, releasing any active track, Kalman filter, and history."""
+    def _clear_track(self) -> None:
+        """Clear active track and Kalman state without resetting the monotonic frame clock."""
+        if self._track is not None:
+            self._track.state = TrackState.DELETED
         self._track = None
         self._kalman = None
-        self._prev_timestamp = None
         self._was_confirmed = False
+
+    def reset(self) -> None:
+        """Reset entire tracker state, releasing any active track, Kalman filter, and monotonic clock."""
+        self._clear_track()
+        self._prev_timestamp = None
 
     def _init_new_track(self, detection: PersonDetection, timestamp: float) -> Track:
         """Initialize a new tentative track from an initial valid detection."""
@@ -395,8 +401,7 @@ class SinglePersonTracker:
         # Check retention timeout (2.0 seconds)
         if miss_duration > self.retention_timeout_seconds:
             # Track expired: delete track state
-            self._track.state = TrackState.DELETED
-            self.reset()
+            self._clear_track()
 
             # If an unassociated detection is present in this frame, start a new track with new ID
             if len(valid_detections) > 0:

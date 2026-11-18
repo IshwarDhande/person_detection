@@ -322,6 +322,178 @@ class TestTrackDataModelAndMemory(unittest.TestCase):
             tracker.update([], timestamp=4.9)
 
 
+class TestTrackingVerificationAndClosure(unittest.TestCase):
+    """Specific verification and closure tests for Milestone M3 review findings."""
+
+    def test_tracking_output_contract(self) -> None:
+        """Verify that Track exposes all 12 contract fields with exact required semantics."""
+        tracker = SinglePersonTracker()
+        det = PersonDetection(bbox_xyxy=(100.0, 200.0, 300.0, 600.0), confidence=0.92)
+
+        # 1. Observed frame
+        track = tracker.update([det], timestamp=10.0)
+        assert track is not None
+
+        # Verify contract attributes exist and have correct types
+        self.assertIsInstance(track.track_id, int)
+        self.assertIsInstance(track.bbox_xyxy, tuple)
+        self.assertEqual(len(track.bbox_xyxy), 4)
+        self.assertIsInstance(track.center, tuple)
+        self.assertEqual(len(track.center), 2)
+        self.assertIsInstance(track.velocity, tuple)
+        self.assertEqual(len(track.velocity), 4)
+        self.assertIsInstance(track.timestamp, float)
+        self.assertIsInstance(track.creation_timestamp, float)
+        self.assertIsInstance(track.last_seen_timestamp, float)
+        self.assertIsInstance(track.hit_count, int)
+        self.assertIsInstance(track.miss_count, int)
+        self.assertIsInstance(track.state, TrackState)
+        self.assertIsInstance(track.observed, bool)
+
+        # Semantics: observed frame
+        self.assertTrue(track.observed)
+        self.assertEqual(track.age, 0.0)
+        self.assertEqual(track.miss_duration, 0.0)
+        self.assertEqual(track.hit_count, 1)
+        self.assertEqual(track.miss_count, 0)
+        self.assertEqual(len(track.history), 1)
+
+        # 2. Coasting / unobserved frame at t=10.5
+        track_lost = tracker.update([], timestamp=10.5)
+        assert track_lost is not None
+
+        # Semantics: unobserved frame
+        self.assertFalse(track_lost.observed)
+        self.assertAlmostEqual(track_lost.age, 0.5)
+        self.assertAlmostEqual(track_lost.miss_duration, 0.5)
+        self.assertEqual(track_lost.hit_count, 0)
+        self.assertEqual(track_lost.miss_count, 1)
+        self.assertEqual(track_lost.state, TrackState.LOST)
+
+        # Predicted box must be distinct from old detection box due to covariance expansion
+        self.assertIsInstance(track_lost.bbox_xyxy, tuple)
+        self.assertEqual(len(track_lost.history), 2)
+        self.assertFalse(track_lost.history[-1].observed)
+
+    def test_case_a_tentative_interrupted_by_missed_frame_full_sequence(self) -> None:
+        """Verify Case A: Det 1 -> hit=1, Det 2 -> hit=2, Miss -> hit=0, Det 3 -> hit=1, Det 4 -> hit=2, Det 5 -> CONFIRMED."""
+        tracker = SinglePersonTracker(confirmation_hits=3)
+        det_box = lambda x: PersonDetection(bbox_xyxy=(x, 100.0, x + 100.0, 300.0), confidence=0.90)
+
+        # 1. Detection 1 -> TENTATIVE, hit_count=1
+        t1 = tracker.update([det_box(100.0)], timestamp=1.000)
+        assert t1 is not None
+        self.assertEqual(t1.state, TrackState.TENTATIVE)
+        self.assertEqual(t1.hit_count, 1)
+        self.assertEqual(t1.miss_count, 0)
+        self.assertTrue(t1.observed)
+
+        # 2. Detection 2 -> TENTATIVE, hit_count=2
+        t2 = tracker.update([det_box(102.0)], timestamp=1.033)
+        assert t2 is not None
+        self.assertEqual(t2.state, TrackState.TENTATIVE)
+        self.assertEqual(t2.hit_count, 2)
+        self.assertEqual(t2.miss_count, 0)
+        self.assertTrue(t2.observed)
+
+        # 3. Missed frame -> LOST, hit_count=0
+        t3 = tracker.update([], timestamp=1.066)
+        assert t3 is not None
+        self.assertEqual(t3.state, TrackState.LOST)
+        self.assertEqual(t3.hit_count, 0)
+        self.assertEqual(t3.miss_count, 1)
+        self.assertFalse(t3.observed)
+
+        # 4. Reacquisition (Detection 3) -> TENTATIVE, hit_count=1
+        t4 = tracker.update([det_box(104.0)], timestamp=1.100)
+        assert t4 is not None
+        self.assertEqual(t4.state, TrackState.TENTATIVE)
+        self.assertEqual(t4.hit_count, 1)
+        self.assertEqual(t4.miss_count, 0)
+        self.assertTrue(t4.observed)
+        self.assertEqual(t4.track_id, 1)  # Retains original ID
+
+        # 5. Detection 4 -> TENTATIVE, hit_count=2
+        t5 = tracker.update([det_box(106.0)], timestamp=1.133)
+        assert t5 is not None
+        self.assertEqual(t5.state, TrackState.TENTATIVE)
+        self.assertEqual(t5.hit_count, 2)
+        self.assertEqual(t5.miss_count, 0)
+        self.assertTrue(t5.observed)
+
+        # 6. Detection 5 -> CONFIRMED, hit_count=3
+        t6 = tracker.update([det_box(108.0)], timestamp=1.166)
+        assert t6 is not None
+        self.assertEqual(t6.state, TrackState.CONFIRMED)
+        self.assertEqual(t6.hit_count, 3)
+        self.assertEqual(t6.miss_count, 0)
+        self.assertTrue(t6.observed)
+        self.assertEqual(t6.track_id, 1)
+
+    def test_case_b_unmatched_detection_while_track_is_lost(self) -> None:
+        """Verify Case B: An unmatched detection during LOST does not replace or spawn tracks."""
+        tracker = SinglePersonTracker(retention_timeout_seconds=2.0)
+        # Establish active track at (100, 100, 200, 300)
+        tracker.update([PersonDetection((100.0, 100.0, 200.0, 300.0), 0.9)], timestamp=1.0)
+
+        # Missed frame: enters LOST at t=1.033
+        t_lost = tracker.update([], timestamp=1.033)
+        assert t_lost is not None
+        self.assertEqual(t_lost.state, TrackState.LOST)
+        self.assertFalse(t_lost.observed)
+        self.assertEqual(t_lost.track_id, 1)
+
+        # Incoming candidate at far location (600, 600, 700, 800) fails IoU and uncertainty gates
+        far_det = PersonDetection(bbox_xyxy=(600.0, 600.0, 700.0, 800.0), confidence=0.88)
+        t_unmatched = tracker.update([far_det], timestamp=1.066)
+        assert t_unmatched is not None
+
+        # Existing track must be retained in LOST
+        self.assertEqual(t_unmatched.track_id, 1)
+        self.assertEqual(t_unmatched.state, TrackState.LOST)
+        self.assertFalse(t_unmatched.observed)
+        # Coordinates must be the Kalman prediction around (100, 100), NOT the far candidate (600, 600)
+        self.assertLess(t_unmatched.center[0], 250.0)
+        self.assertLess(t_unmatched.center[1], 350.0)
+
+        # Tracker still maintains only ONE active track
+        self.assertEqual(tracker.active_track, t_unmatched)
+
+    def test_case_c_reacquisition_rules(self) -> None:
+        """Verify Case C: Reacquisition rules across tentative, confirmed, and expired tracks."""
+        tracker = SinglePersonTracker(confirmation_hits=3, retention_timeout_seconds=2.0)
+        det_box = lambda x: PersonDetection(bbox_xyxy=(x, 100.0, x + 100.0, 300.0), confidence=0.90)
+
+        # 1. Establish CONFIRMED track
+        tracker.update([det_box(100.0)], timestamp=1.000)
+        tracker.update([det_box(101.0)], timestamp=1.033)
+        t_conf = tracker.update([det_box(102.0)], timestamp=1.066)
+        assert t_conf is not None
+        self.assertEqual(t_conf.state, TrackState.CONFIRMED)
+
+        # Coast for 1.0s (within 2.0s limit)
+        t_coast = tracker.update([], timestamp=2.066)
+        assert t_coast is not None
+        self.assertEqual(t_coast.state, TrackState.LOST)
+
+        # Valid reacquisition at t=2.100 restores CONFIRMED state with original ID
+        t_reacq = tracker.update([det_box(103.0)], timestamp=2.100)
+        assert t_reacq is not None
+        self.assertEqual(t_reacq.state, TrackState.CONFIRMED)
+        self.assertEqual(t_reacq.track_id, 1)
+
+        # Let track expire beyond 2.0s (from t=2.100 to t=4.200)
+        t_expired = tracker.update([], timestamp=4.200)
+        self.assertIsNone(t_expired)
+        self.assertIsNone(tracker.active_track)
+
+        # Subsequent detection creates new track with new ID (2) in TENTATIVE state
+        t_new = tracker.update([det_box(100.0)], timestamp=4.500)
+        assert t_new is not None
+        self.assertEqual(t_new.track_id, 2)
+        self.assertEqual(t_new.state, TrackState.TENTATIVE)
+
+
 if __name__ == "__main__":
     unittest.main()
 

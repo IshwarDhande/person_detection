@@ -11,7 +11,8 @@
 |  * M1: Basic Person Detection Live Demo & Tests (run_detection_demo.py)                           |
 |  * M2: Reliable Single-Person Detection with EMA Smoothing (--ema-alpha)                          |
 |  * M3: Single-Person Tracking with 8-D Kalman Filter & IoU Gating (run_tracking_demo.py)          |
-|  * M4+: Frame-Level Readiness & Spatial Understanding (Future Milestones)                         |
+|  * M4: Frame-Level Readiness Perception & Interaction Zone (run_readiness_demo.py)                |
+|  * M5+: Temporal Approach & Final Readiness Decisions (Future Milestones)                         |
 |                                                                                                   |
 +---------------------------------------------------------------------------------------------------+
 ```
@@ -128,12 +129,52 @@ Scans V4L2 devices, USB topology, formats, and executes a 100-frame streaming th
 cd /home/eshwar/code/detection && /home/eshwar/code/interrupt/venv/bin/python3 tools/calibration/camera_hardware_discovery.py
 ```
 
-### 2. Scene Inspection Image Capture (Mode A)
-Acquires reference calibration frames with consent verification and operator countdown delay.
+
+---
+
+## Milestone M4 — Frame-Level Readiness Perception Demo
+
+The following commands launch and evaluate the Milestone M4 frame-level readiness perception runner with person detection, bounding-box validity, MediaPipe face visibility, interaction-zone membership, and approximate head orientation.
+
+### 1. Quick Start (Interactive Laptop Webcam)
+Runs live readiness perception on `/dev/video0`. Displays the interaction-zone polygon, person bounding box (color-coded by zone membership), face bounding box, and diagnostic HUD showing all five observation conditions.
 ```bash
-cd /home/eshwar/code/detection && /home/eshwar/code/interrupt/venv/bin/python3 tools/calibration/camera_capture_utility.py \
-  --mode A \
-  --step empty \
-  --delay 3 \
-  --consent
+cd /home/eshwar/code/detection && /home/eshwar/code/interrupt/venv/bin/python3 perception/readiness/run_readiness_demo.py
 ```
+> *Press `q` or `Esc` inside the camera window to exit.*
+
+### 2. Full Parameter Launch (Explicit Options)
+Runs live readiness perception with custom YAML configuration and device overrides:
+```bash
+/home/eshwar/code/interrupt/venv/bin/python3 /home/eshwar/code/detection/perception/readiness/run_readiness_demo.py \
+  --config /home/eshwar/code/detection/configs/m4/stationary_readiness.yaml \
+  --camera /dev/video0 \
+  --model /home/eshwar/code/detection/yolov8n.pt \
+  --face-model /home/eshwar/code/detection/models/face_landmarker.task \
+  --conf 0.5 \
+  --width 1280 \
+  --height 720 \
+  --fps 30
+```
+
+### 3. Headless Profiling Run (Bounded 90 Frames)
+Runs perception inference without opening a graphical window to measure component and pipeline latencies directly in the terminal:
+```bash
+cd /home/eshwar/code/detection && /home/eshwar/code/interrupt/venv/bin/python3 perception/readiness/run_readiness_demo.py \
+  --camera /dev/video0 \
+  --headless \
+  --max-frames 90
+```
+
+### 4. M4 Dedicated Unit Test Suite
+Executes all 48 unit tests covering bounding-box validation, interaction-zone geometry, face analysis, orientation ratios, observation contract, and config schemas:
+```bash
+cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 -m unittest discover -s tests/perception/readiness -t . -v
+```
+
+### 5. Complete Repository Regression Test Suite (M1 + M2 + M3 + M4)
+Executes all 138 unit tests across the entire codebase:
+```bash
+cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 -m unittest discover -s tests -t . -v
+```
+

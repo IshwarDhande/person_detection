@@ -19,8 +19,10 @@ ENV/
 *.onnx
 *.engine
 *.tflite
+*.task
 *.weights
 checkpoints/
+models/
 
 # execution logs and scratch files
 logs/

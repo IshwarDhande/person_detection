@@ -1,0 +1,36 @@
+# M4 Frame-Level Readiness Perception Configuration
+# Specification: docs/m4_stationary_readiness.md
+
+camera:
+  device: "/dev/video0"
+  width: 1280
+  height: 720
+  fps: 30
+  fourcc: "MJPG"
+
+detector:
+  model_path: "yolov8n.pt"
+  confidence_threshold: 0.50
+  class_id: 0
+
+face_analyzer:
+  model_path: "models/face_landmarker.task"
+  min_face_width: 40      # Minimum face width in pixels
+  min_face_height: 40     # Minimum face height in pixels
+  min_detection_confidence: 0.50
+  min_tracking_confidence: 0.50
+
+orientation:
+  yaw_threshold: 0.35          # Max yaw asymmetry ratio for FACING_ROBOT
+  pitch_threshold: 0.60        # Max pitch vertical ratio for FACING_ROBOT
+  uncertain_multiplier: 1.5    # Multiplier for boundary between FACING and NOT_FACING
+
+interaction_zone:
+  enabled: true
+  coordinate_system: "normalized"   # Normalized coordinates [0.0, 1.0] relative to frame width and height
+  vertices:
+    - [0.23, 0.28]
+    - [0.77, 0.28]
+    - [0.90, 0.90]
+    - [0.10, 0.90]
+
