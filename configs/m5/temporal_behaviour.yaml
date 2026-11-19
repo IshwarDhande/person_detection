@@ -1,0 +1,24 @@
+# ==============================================================================
+# Vision-Based First Contact — Milestone M5 Temporal Behaviour Estimation Config
+# ==============================================================================
+
+temporal:
+  # Observation History & Temporal Continuity (Frozen)
+  history_window_seconds: 1.0               # One-second bounded history window
+  max_observation_gap_seconds: 0.2          # 200 ms maximum observation gap (temporal continuity)
+  initial_valid_observations: 5             # 5 consecutive valid observations required for READY
+
+  # Stationary Predicate (Frozen)
+  stationary_velocity_threshold_px_s: 20.0  # Strict upper bound: s_t < 20 px/s
+  stationary_displacement_threshold_px: 20.0 # Strict upper bound: D_t < 20 px over 1.0s
+  stationary_displacement_window_seconds: 1.0 # 1.0s window for displacement test
+
+  # Approach Predicate (Frozen confirmation; Provisional thresholds)
+  approach_confirmation_seconds: 0.5        # 500 ms sustained approach evidence required
+  approach_min_direction_cosine: 0.5        # Provisional: cos(60 deg) = 0.5 minimum cosine towards centroid
+  approach_min_closing_speed_px_s: 10.0     # Provisional: 10 px/s minimum closing speed towards centroid
+
+  # Stability Timer (Frozen)
+  stability_duration_seconds: 2.0           # 2.0s continuous stability required
+  stability_violation_tolerance_seconds: 0.2 # 200 ms cumulative violation budget for brief fluctuations
+
