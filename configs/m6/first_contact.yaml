@@ -1,0 +1,29 @@
+# Milestone M6: Readiness-Based Single-Person First Contact Configuration
+# Defines operational parameters for the readiness engine, distance provider,
+# and visit lifecycle management.
+
+first_contact:
+  # Proximity condition threshold in metres (d_i <= distance_max_m)
+  distance_max_m: 1.5
+
+  # Distance provider mode: "mock" (for prototyping / laptop demo) or "metric" (production)
+  distance_mode: "mock"
+
+  # Default distance value supplied by MockDistanceProvider in metres
+  mock_distance_m: 1.2
+
+  # Required continuous duration for all 7 readiness predicates to achieve READY (seconds)
+  eligibility_duration_seconds: 2.0
+
+  # Maximum duration in seconds to retain visit during tracking loss before termination
+  tracking_loss_timeout_seconds: 5.0
+
+  # Maximum allowable staleness between observation timestamp and evaluation timestamp (seconds)
+  observation_freshness_seconds: 0.5
+
+  # Maximum allowable inter-frame observation gap before continuous eligibility resets (seconds)
+  max_inter_frame_gap_seconds: 0.5
+
+  # If true, strictly rejects "mock" distance mode and demands validated metric distance
+  require_metric_distance_in_production: false
+

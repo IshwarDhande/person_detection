@@ -236,11 +236,17 @@ class SinglePersonTracker:
         self._next_track_id: int = 1
         self._prev_timestamp: Optional[float] = None
         self._was_confirmed: bool = False
+        self._last_matched_detection: Optional[PersonDetection] = None
 
     @property
     def active_track(self) -> Optional[Track]:
         """Currently active track or None if no track is maintained."""
         return self._track
+
+    @property
+    def last_matched_detection(self) -> Optional[PersonDetection]:
+        """The detection associated with the active track in the current frame, or None."""
+        return self._last_matched_detection
 
     @property
     def next_track_id(self) -> int:
@@ -254,6 +260,7 @@ class SinglePersonTracker:
         self._track = None
         self._kalman = None
         self._was_confirmed = False
+        self._last_matched_detection = None
 
     def reset(self) -> None:
         """Reset entire tracker state, releasing any active track, Kalman filter, and monotonic clock."""
@@ -268,6 +275,7 @@ class SinglePersonTracker:
 
         self._kalman = ConstantVelocityKalmanFilter8D(bbox)
         self._was_confirmed = False
+        self._last_matched_detection = detection
 
         track = Track(
             track_id=track_id,
@@ -353,6 +361,7 @@ class SinglePersonTracker:
 
         # Subcase 2A: Successful Association Match
         if best_candidate is not None:
+            self._last_matched_detection = best_candidate
             matched_bbox = best_candidate.effective_bbox_xyxy
             updated_bbox = self._kalman.update(matched_bbox)
 
@@ -387,6 +396,7 @@ class SinglePersonTracker:
             return self._track
 
         # Subcase 2B: No Match Found (unobserved / coasting)
+        self._last_matched_detection = None
         self._track.bbox_xyxy = predicted_bbox
         self._track.center = self._kalman.center_xy
         self._track.velocity = self._kalman.velocity_xywh
