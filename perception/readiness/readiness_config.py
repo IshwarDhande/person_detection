@@ -35,7 +35,7 @@ class CameraConfig:
 @dataclass(frozen=True)
 class DetectorConfig:
     """YOLO person detector configuration."""
-    model_path: str = "yolov8n.pt"
+    model_path: str = "models/yolov8n.pt"
     confidence_threshold: float = 0.50
     class_id: int = 0
 
@@ -88,10 +88,10 @@ class InteractionZoneConfig:
     enabled: bool = True
     coordinate_system: str = "normalized"
     vertices: tuple[tuple[float, float], ...] = (
-        (0.23, 0.28),
-        (0.77, 0.28),
-        (0.90, 0.90),
-        (0.10, 0.90),
+        (0.05, 0.05),
+        (0.95, 0.05),
+        (0.95, 0.95),
+        (0.05, 0.95),
     )
 
     def __post_init__(self) -> None:
@@ -151,7 +151,7 @@ def load_readiness_config(config_path: str | Path) -> ReadinessConfig:
 
     det_data = data.get("detector", {})
     det_cfg = DetectorConfig(
-        model_path=str(det_data.get("model_path", "yolov8n.pt")),
+        model_path=str(det_data.get("model_path", "models/yolov8n.pt")),
         confidence_threshold=float(det_data.get("confidence_threshold", 0.50)),
         class_id=int(det_data.get("class_id", 0)),
     )
@@ -173,7 +173,7 @@ def load_readiness_config(config_path: str | Path) -> ReadinessConfig:
     )
 
     zone_data = data.get("interaction_zone", {})
-    raw_vertices = zone_data.get("vertices", [[0.23, 0.28], [0.77, 0.28], [0.90, 0.90], [0.10, 0.90]])
+    raw_vertices = zone_data.get("vertices", [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]])
     tuple_vertices = tuple((float(v[0]), float(v[1])) for v in raw_vertices)
     zone_cfg = InteractionZoneConfig(
         enabled=bool(zone_data.get("enabled", True)),

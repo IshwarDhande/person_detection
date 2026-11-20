@@ -155,10 +155,7 @@ class VisitManager:
                 is_m4_active_person = (
                     matched_detection.bbox_xyxy == m4_person.bbox_metrics.original_bbox_xyxy
                 )
-            elif track is not None:
-                is_m4_active_person = (
-                    track.bbox_xyxy == m4_person.bbox_metrics.original_bbox_xyxy
-                )
+            # Fail closed: Do NOT use track.bbox_xyxy alone without verified matched_detection
 
         # Update zone entry for the active target
         if is_active_target_observed and is_m4_active_person and m4_person is not None:

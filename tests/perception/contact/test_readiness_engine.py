@@ -9,6 +9,7 @@ from __future__ import annotations
 import unittest
 
 from perception.contact.contact_config import ContactConfig
+from perception.contact.criteria_selection import ALL_CRITERIA_NUMBERS
 from perception.contact.contact_types import (
     DistanceObservation,
     DistanceSource,
@@ -122,10 +123,11 @@ def _make_temporal_obs(
     approach_val: ApproachValue = ApproachValue.APPROACHING,
     approach_stat: ObservationStatus = ObservationStatus.VALID,
     timestamp: float = 1.0,
+    track_id: int | None = 1,
 ) -> TemporalObservation:
     return TemporalObservation(
         timestamp=timestamp,
-        track_id=1,
+        track_id=track_id,
         observed=True,
         approach=Observation(value=approach_val, confidence=None, status=approach_stat),
         movement=Observation(value=movement_val, confidence=None, status=movement_stat),
@@ -288,7 +290,10 @@ class TestReadinessEngine(unittest.TestCase):
             distance_mode="metric",
             distance_max_m=1.5,
         )
-        engine_metric = ReadinessEngine(config=cfg_metric)
+        engine_metric = ReadinessEngine(
+            config=cfg_metric,
+            criteria_selection=ALL_CRITERIA_NUMBERS,
+        )
         frame_obs = _make_frame_obs(timestamp=1.0)
         temp_obs = _make_temporal_obs(timestamp=1.0)
 
@@ -308,6 +313,284 @@ class TestReadinessEngine(unittest.TestCase):
             self.track, frame_obs, temp_obs, self.det, timestamp=1.0
         )
         self.assertIs(self.engine.last_result, result)
+
+    def test_non_monotonic_timestamp_fails_closed_at_engine_boundary(self) -> None:
+        """Verify non-monotonic timestamp at engine boundary does not raise ValueError, resets eligibility."""
+        frame_obs = _make_frame_obs(timestamp=1.0)
+        temp_obs = _make_temporal_obs(timestamp=1.0)
+
+        # Accumulate some eligibility
+        res1 = self.engine.evaluate(
+            self.track, frame_obs, temp_obs, self.det, timestamp=1.0
+        )
+        self.assertEqual(res1.state, ReadinessState.PENDING)
+
+        frame_obs2 = _make_frame_obs(timestamp=1.2)
+        temp_obs2 = _make_temporal_obs(timestamp=1.2)
+        res2 = self.engine.evaluate(
+            self.track, frame_obs2, temp_obs2, self.det, timestamp=1.2
+        )
+        self.assertEqual(res2.state, ReadinessState.PENDING)
+        self.assertAlmostEqual(res2.elapsed_eligibility, 0.2, places=2)
+
+        # Non-monotonic backward timestamp jump to 0.5s: MUST NOT CRASH
+        frame_obs_back = _make_frame_obs(timestamp=0.5)
+        temp_obs_back = _make_temporal_obs(timestamp=0.5)
+        res_back = self.engine.evaluate(
+            self.track, frame_obs_back, temp_obs_back, self.det, timestamp=0.5
+        )
+        self.assertEqual(res_back.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_back.event)
+        self.assertEqual(res_back.elapsed_eligibility, 0.0)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res_back.reasons)
+
+    def test_nan_inf_negative_timestamps_handled_fail_closed_at_engine_boundary(self) -> None:
+        """Verify NaN, inf, and negative timestamps fail closed at engine boundary without exception."""
+        frame_obs = _make_frame_obs(timestamp=1.0)
+        temp_obs = _make_temporal_obs(timestamp=1.0)
+
+        # NaN timestamp
+        res_nan = self.engine.evaluate(
+            self.track, frame_obs, temp_obs, self.det, timestamp=float("nan")
+        )
+        self.assertEqual(res_nan.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_nan.event)
+        self.assertEqual(res_nan.elapsed_eligibility, 0.0)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res_nan.reasons)
+
+        # Inf timestamp
+        res_inf = self.engine.evaluate(
+            self.track, frame_obs, temp_obs, self.det, timestamp=float("inf")
+        )
+        self.assertEqual(res_inf.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_inf.event)
+        self.assertEqual(res_inf.elapsed_eligibility, 0.0)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res_inf.reasons)
+
+        # Negative timestamp
+        res_neg = self.engine.evaluate(
+            self.track, frame_obs, temp_obs, self.det, timestamp=-5.0
+        )
+        self.assertEqual(res_neg.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_neg.event)
+        self.assertEqual(res_neg.elapsed_eligibility, 0.0)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res_neg.reasons)
+
+    def test_active_target_disappears_while_another_person_visible_integration(self) -> None:
+        """Verify when active target disappears and bystander is visible, readiness cannot advance."""
+        t = 1.0
+        dt = 0.1
+
+        # Phase 1: Track 1 (active target) accumulates 1.0s of continuous eligibility
+        for _ in range(11):
+            trk1 = _make_track(track_id=1, bbox=self.box, timestamp=t)
+            f_obs1 = _make_frame_obs(bbox=self.box, timestamp=t)
+            t_obs1 = _make_temporal_obs(timestamp=t, track_id=1)
+            res1 = self.engine.evaluate(trk1, f_obs1, t_obs1, self.det, timestamp=t)
+            t += dt
+
+        self.assertEqual(res1.state, ReadinessState.PENDING)
+        self.assertAlmostEqual(res1.elapsed_eligibility, 1.0, places=2)
+        active_visit = self.engine.visit_manager.active_visit_id
+        self.assertIsNotNone(active_visit)
+        self.assertEqual(self.engine.visit_manager.active_track_id, 1)
+
+        # Phase 2: Active target disappears, but Track 2 is visible in zone, facing robot, stationary
+        box2 = (700.0, 200.0, 900.0, 600.0)
+        trk2 = _make_track(track_id=2, bbox=box2, timestamp=t)
+        det2 = PersonDetection(bbox_xyxy=box2, confidence=0.91, class_id=0)
+        f_obs2 = _make_frame_obs(bbox=box2, timestamp=t)
+        t_obs2 = _make_temporal_obs(timestamp=t, track_id=2)
+
+        res_other = self.engine.evaluate(trk2, f_obs2, t_obs2, det2, timestamp=t)
+
+        # Must fail closed: state NOT_READY, timer reset to 0, no event
+        self.assertEqual(res_other.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_other.event)
+        self.assertEqual(res_other.elapsed_eligibility, 0.0)
+        self.assertIn(ReasonCode.TARGET_MISMATCH, res_other.reasons)
+
+        # Visit 1 is retained in tracking-loss grace period (NOT hijacked by Track 2)
+        self.assertEqual(self.engine.visit_manager.active_visit_id, active_visit)
+        self.assertEqual(self.engine.visit_manager.active_track_id, 1)
+        self.assertTrue(self.engine.visit_manager.is_in_loss_grace_period)
+
+    def test_backward_timestamp_while_not_ready(self) -> None:
+        """Verify backward timestamp while in NOT_READY state is rejected by engine."""
+        # Frame 1 at t=2.0 with broken orientation -> NOT_READY
+        f_obs1 = _make_frame_obs(orient_val=HeadOrientationValue.NOT_FACING_ROBOT, timestamp=2.0)
+        t_obs1 = _make_temporal_obs(timestamp=2.0)
+        res1 = self.engine.evaluate(self.track, f_obs1, t_obs1, self.det, timestamp=2.0)
+        self.assertEqual(res1.state, ReadinessState.NOT_READY)
+        self.assertEqual(self.engine.last_accepted_timestamp, 2.0)
+
+        # Frame 2 at t=1.0 (backward while NOT_READY)
+        f_obs2 = _make_frame_obs(timestamp=1.0)
+        t_obs2 = _make_temporal_obs(timestamp=1.0)
+        res2 = self.engine.evaluate(self.track, f_obs2, t_obs2, self.det, timestamp=1.0)
+        self.assertEqual(res2.state, ReadinessState.NOT_READY)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res2.reasons)
+        self.assertIsNone(res2.event)
+        # Verify invalid timestamp did not overwrite last accepted timestamp
+        self.assertEqual(self.engine.last_accepted_timestamp, 2.0)
+
+    def test_backward_timestamp_while_pending(self) -> None:
+        """Verify backward timestamp while in PENDING state resets eligibility and returns NOT_READY."""
+        # Frame 1 at t=1.0 -> PENDING
+        res1 = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=1.0), _make_temporal_obs(timestamp=1.0), self.det, timestamp=1.0
+        )
+        self.assertEqual(res1.state, ReadinessState.PENDING)
+
+        # Frame 2 at t=1.5 -> PENDING, 0.5s elapsed
+        res2 = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=1.5), _make_temporal_obs(timestamp=1.5), self.det, timestamp=1.5
+        )
+        self.assertEqual(res2.state, ReadinessState.PENDING)
+        self.assertAlmostEqual(res2.elapsed_eligibility, 0.5, places=2)
+
+        # Frame 3 at t=1.2 (< 1.5) -> backward
+        res3 = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=1.2), _make_temporal_obs(timestamp=1.2), self.det, timestamp=1.2
+        )
+        self.assertEqual(res3.state, ReadinessState.NOT_READY)
+        self.assertEqual(res3.elapsed_eligibility, 0.0)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res3.reasons)
+        self.assertIsNone(res3.event)
+
+    def test_backward_timestamp_after_ready(self) -> None:
+        """Verify backward timestamp after reaching READY resets eligibility and emits no event."""
+        # Reach READY at t=3.0 (from t=1.0)
+        dt = 0.1
+        for i in range(21):
+            t = 1.0 + i * dt
+            trk = _make_track(track_id=1, bbox=self.box, timestamp=t)
+            res = self.engine.evaluate(
+                trk, _make_frame_obs(timestamp=t), _make_temporal_obs(timestamp=t), self.det, timestamp=t
+            )
+        self.assertEqual(res.state, ReadinessState.READY)
+        self.assertIsNotNone(res.event)
+
+        # Backward timestamp at t=2.5 (< 3.0)
+        trk_back = _make_track(track_id=1, bbox=self.box, timestamp=2.5)
+        res_back = self.engine.evaluate(
+            trk_back, _make_frame_obs(timestamp=2.5), _make_temporal_obs(timestamp=2.5), self.det, timestamp=2.5
+        )
+        self.assertEqual(res_back.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_back.event)
+        self.assertEqual(res_back.elapsed_eligibility, 0.0)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res_back.reasons)
+
+    def test_duplicate_timestamp_rejected(self) -> None:
+        """Verify duplicate timestamp (t == last_accepted) is rejected with INVALID_TIMESTAMP."""
+        res1 = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=1.0), _make_temporal_obs(timestamp=1.0), self.det, timestamp=1.0
+        )
+        self.assertEqual(res1.state, ReadinessState.PENDING)
+
+        # Duplicate timestamp t=1.0
+        res_dup = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=1.0), _make_temporal_obs(timestamp=1.0), self.det, timestamp=1.0
+        )
+        self.assertEqual(res_dup.state, ReadinessState.NOT_READY)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res_dup.reasons)
+        self.assertIsNone(res_dup.event)
+
+    def test_missing_timestamp_rejected(self) -> None:
+        """Verify missing timestamp (None in both argument and metadata) fails with INVALID_TIMESTAMP."""
+        from unittest.mock import MagicMock
+        f_obs_none = MagicMock(spec=FrameObservation)
+        f_obs_none.frame_metadata = MagicMock(timestamp=None)
+
+        res = self.engine.evaluate(
+            self.track, f_obs_none, _make_temporal_obs(timestamp=1.0), self.det, timestamp=None
+        )
+        self.assertEqual(res.state, ReadinessState.NOT_READY)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res.reasons)
+        self.assertIsNone(res.event)
+
+    def test_valid_timestamp_following_invalid_timestamp(self) -> None:
+        """Verify valid timestamp can be accepted following an invalid timestamp."""
+        # Frame 1 at t=1.0 accepted
+        res1 = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=1.0), _make_temporal_obs(timestamp=1.0), self.det, timestamp=1.0
+        )
+        self.assertEqual(res1.state, ReadinessState.PENDING)
+        self.assertEqual(self.engine.last_accepted_timestamp, 1.0)
+
+        # Frame 2 at t=0.5 rejected
+        res_bad = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=0.5), _make_temporal_obs(timestamp=0.5), self.det, timestamp=0.5
+        )
+        self.assertEqual(res_bad.state, ReadinessState.NOT_READY)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, res_bad.reasons)
+        # Last accepted timestamp must still be 1.0
+        self.assertEqual(self.engine.last_accepted_timestamp, 1.0)
+
+        # Frame 3 at t=1.2 accepted
+        res3 = self.engine.evaluate(
+            self.track, _make_frame_obs(timestamp=1.2), _make_temporal_obs(timestamp=1.2), self.det, timestamp=1.2
+        )
+        self.assertEqual(res3.state, ReadinessState.PENDING)
+        self.assertEqual(self.engine.last_accepted_timestamp, 1.2)
+
+    def test_invalid_timestamp_never_produces_readiness_event(self) -> None:
+        """Verify an invalid timestamp at the threshold boundary cannot trigger event emission."""
+        # Accumulate 1.9s of eligibility
+        dt = 0.1
+        for i in range(20):
+            t = 1.0 + i * dt
+            trk = _make_track(track_id=1, bbox=self.box, timestamp=t)
+            res = self.engine.evaluate(
+                trk, _make_frame_obs(timestamp=t), _make_temporal_obs(timestamp=t), self.det, timestamp=t
+            )
+        self.assertEqual(res.state, ReadinessState.PENDING)
+        self.assertAlmostEqual(res.elapsed_eligibility, 1.9, places=2)
+
+        # At potential threshold boundary (t=3.0), inject invalid timestamp (backward to 2.0)
+        trk_bad = _make_track(track_id=1, bbox=self.box, timestamp=2.0)
+        res_bad = self.engine.evaluate(
+            trk_bad, _make_frame_obs(timestamp=2.0), _make_temporal_obs(timestamp=2.0), self.det, timestamp=2.0
+        )
+        self.assertEqual(res_bad.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_bad.event)
+        self.assertEqual(res_bad.elapsed_eligibility, 0.0)
+
+    def test_invalid_distance_evidence_cannot_complete_eligibility(self) -> None:
+        """Verify inconsistent or invalid distance evidence resets eligibility and prevents event emission."""
+        engine = ReadinessEngine(config=self.config, criteria_selection=ALL_CRITERIA_NUMBERS)
+        # Accumulate 1.9s of eligibility
+        dt = 0.1
+        for i in range(20):
+            t = 1.0 + i * dt
+            trk = _make_track(track_id=1, bbox=self.box, timestamp=t)
+            res = engine.evaluate(
+                trk, _make_frame_obs(timestamp=t), _make_temporal_obs(timestamp=t), self.det, timestamp=t
+            )
+        self.assertEqual(res.state, ReadinessState.PENDING)
+
+        # Frame 21 at t=3.0: distance observation has inconsistent timestamp (t=1.0)
+        trk_curr = _make_track(track_id=1, bbox=self.box, timestamp=3.0)
+        dist_inconsistent = DistanceObservation(
+            distance_m=1.2,
+            source=DistanceSource.MOCK,
+            status=ObservationStatus.VALID,
+            timestamp=1.0,  # 2.0s inconsistent with current frame (3.0s)
+            track_id=1,
+        )
+        res_inconsistent = engine.evaluate(
+            trk_curr,
+            _make_frame_obs(timestamp=3.0),
+            _make_temporal_obs(timestamp=3.0),
+            self.det,
+            distance_observation=dist_inconsistent,
+            timestamp=3.0,
+        )
+        self.assertEqual(res_inconsistent.state, ReadinessState.NOT_READY)
+        self.assertIsNone(res_inconsistent.event)
+        self.assertFalse(res_inconsistent.predicates.D)
+        self.assertIn(ReasonCode.TIMESTAMP_MISMATCH, res_inconsistent.reasons)
+        self.assertEqual(res_inconsistent.elapsed_eligibility, 0.0)
 
 
 if __name__ == "__main__":

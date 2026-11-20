@@ -51,6 +51,7 @@ class PredicateEvaluator:
         distance_observation: Optional[DistanceObservation],
         visit_manager: VisitManager,
         timestamp: float,
+        is_active_target_observed: Optional[bool] = None,
     ) -> tuple[ReadinessPredicates, list[ReasonCode]]:
         """Evaluate the seven readiness predicates and produce explainable reason codes.
 
@@ -62,6 +63,7 @@ class PredicateEvaluator:
             distance_observation: Current M6 DistanceObservation, or None.
             visit_manager: Active VisitManager instance.
             timestamp: Monotonic frame evaluation timestamp in seconds.
+            is_active_target_observed: Explicit observation status of locked target from VisitManager.
 
         Returns:
             (ReadinessPredicates, list[ReasonCode]) tuple.
@@ -120,6 +122,7 @@ class PredicateEvaluator:
             is_track_active
             and track is not None
             and track.observed
+            and (is_active_target_observed is None or is_active_target_observed)
         )
         if not is_tracking_observed:
             reasons.append(ReasonCode.TRACKING_LOST)
@@ -151,16 +154,13 @@ class PredicateEvaluator:
             and m4_person.bounding_box.status == ObservationStatus.VALID
             and m4_person.bbox_metrics is not None
         )
-        # Strict association: matched detection must equal M4 selected bbox of active person
+        # Strict association: matched detection must equal M4 selected bbox of active person.
+        # Fail closed: Do NOT fall back to track.bbox_xyxy alone without verified matched_detection!
         is_same_person = False
         if b_box_valid and is_tracking_observed:
             if matched_detection is not None:
                 is_same_person = (
                     matched_detection.bbox_xyxy == m4_person.bbox_metrics.original_bbox_xyxy
-                )
-            elif track is not None:
-                is_same_person = (
-                    track.bbox_xyxy == m4_person.bbox_metrics.original_bbox_xyxy
                 )
 
         if not is_same_person and is_tracking_observed:
@@ -195,26 +195,37 @@ class PredicateEvaluator:
         d_valid = False
         if distance_observation is None or distance_observation.status == ObservationStatus.INVALID:
             reasons.append(ReasonCode.DISTANCE_UNAVAILABLE)
-        elif not math.isfinite(distance_observation.timestamp):
-            reasons.append(ReasonCode.INVALID_TIMESTAMP)
-        elif abs(timestamp - distance_observation.timestamp) > self.config.observation_freshness_seconds:
-            reasons.append(ReasonCode.STALE_OBSERVATION)
-            reasons.append(ReasonCode.DISTANCE_UNAVAILABLE)
-        elif distance_observation.status == ObservationStatus.UNCERTAIN:
-            reasons.append(ReasonCode.DISTANCE_UNRELIABLE)
         elif (
-            distance_observation.track_id is not None
-            and active_track_id is not None
-            and distance_observation.track_id != active_track_id
+            distance_observation.timestamp is None
+            or not isinstance(distance_observation.timestamp, (int, float))
+            or not math.isfinite(distance_observation.timestamp)
         ):
-            reasons.append(ReasonCode.TARGET_MISMATCH)
+            reasons.append(ReasonCode.INVALID_TIMESTAMP)
             reasons.append(ReasonCode.DISTANCE_UNAVAILABLE)
-        elif self.config.require_metric_distance_in_production and distance_observation.source == DistanceSource.MOCK:
-            reasons.append(ReasonCode.DISTANCE_UNRELIABLE)
-        elif distance_observation.distance_m > self.config.distance_max_m:
-            reasons.append(ReasonCode.TOO_FAR)
         else:
-            d_valid = (distance_observation.status == ObservationStatus.VALID)
+            is_stale = abs(timestamp - distance_observation.timestamp) > self.config.observation_freshness_seconds
+            is_frame_mismatch = abs(frame_ts - distance_observation.timestamp) > self.config.observation_freshness_seconds
+
+            if is_stale:
+                reasons.append(ReasonCode.STALE_OBSERVATION)
+            if is_frame_mismatch:
+                reasons.append(ReasonCode.TIMESTAMP_MISMATCH)
+            if is_stale or is_frame_mismatch:
+                reasons.append(ReasonCode.DISTANCE_UNAVAILABLE)
+            elif distance_observation.status == ObservationStatus.UNCERTAIN:
+                reasons.append(ReasonCode.DISTANCE_UNRELIABLE)
+            elif active_track_id is not None and (
+                distance_observation.track_id is None
+                or distance_observation.track_id != active_track_id
+            ):
+                reasons.append(ReasonCode.TARGET_MISMATCH)
+                reasons.append(ReasonCode.DISTANCE_UNAVAILABLE)
+            elif self.config.require_metric_distance_in_production and distance_observation.source == DistanceSource.MOCK:
+                reasons.append(ReasonCode.DISTANCE_UNRELIABLE)
+            elif distance_observation.distance_m > self.config.distance_max_m:
+                reasons.append(ReasonCode.TOO_FAR)
+            else:
+                d_valid = (distance_observation.status == ObservationStatus.VALID)
 
         # ---------------------------------------------------------------------
         # Predicate S — Stationary behaviour
@@ -224,13 +235,16 @@ class PredicateEvaluator:
             temp_ts = temporal_observation.timestamp
             if not math.isfinite(temp_ts):
                 reasons.append(ReasonCode.INVALID_TIMESTAMP)
-            elif abs(timestamp - temp_ts) > self.config.observation_freshness_seconds or abs(frame_ts - temp_ts) > self.config.observation_freshness_seconds:
+            elif (
+                abs(timestamp - temp_ts) > self.config.observation_freshness_seconds
+                or abs(frame_ts - temp_ts) > self.config.observation_freshness_seconds
+            ):
                 reasons.append(ReasonCode.STALE_OBSERVATION)
                 reasons.append(ReasonCode.TIMESTAMP_MISMATCH)
             elif (
-                temporal_observation.track_id is not None
-                and active_track_id is not None
-                and temporal_observation.track_id != active_track_id
+                active_track_id is None
+                or temporal_observation.track_id is None
+                or temporal_observation.track_id != active_track_id
             ):
                 reasons.append(ReasonCode.TARGET_MISMATCH)
             elif not temporal_observation.observed:

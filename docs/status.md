@@ -74,6 +74,37 @@ Implement **M1 only**:
 
 Do not implement tracking, readiness, multi-person scheduling, or robot calibration in M1.
 
+## M6 — Complete Single-Person First-Contact Pipeline
+
+**Status: IMPLEMENTATION COMPLETE**
+
+M6 integrates M1–M5 and implements the complete single-person first-contact readiness pipeline.
+
+Implemented capabilities:
+- Seven-predicate readiness evaluation.
+- Active-person identity enforcement.
+- Visit lifecycle and target locking.
+- Two-second continuous eligibility evaluation.
+- Monotonic timestamp validation.
+- Observation freshness and frame consistency checks.
+- Distance-provider integration with explicit MOCK/METRIC modes.
+- Revocable readiness state and one-shot `FIRST_CONTACT_READY` event per visit.
+- Tracking-loss handling and fail-closed reacquisition policy.
+- Structured reason codes, logging, and diagnostic visualization.
+
+**Requirements note:** Initial presence currently applies to every new visit when a person is already inside the interaction zone. This is the implemented Option B behavior.
+
+**Validation status:**
+- M6 implementation and regression-test suite developed.
+- Python compilation verified.
+- Full M1–M6 test execution and integration validation remain pending independent verification.
+- Live-camera validation remains pending.
+- Production metric-distance estimation remains unimplemented.
+
+M6 implementation is complete. Remaining activities belong to system-level integration, validation, and deployment rather than reopening M6 implementation.
+
+
+
 ## Critical invariants
 
 No trigger under uncertain required evidence; approach is mandatory; readiness is continuous for 2 seconds; locked target is not replaced merely by a closer person; background evaluation continues; temporary invisibility differs from confirmed departure; identities remain separate; perception timeout does not end interaction; RGB distance requires calibration and uncertainty.

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import unittest
 
+from perception.contact.criteria_selection import ALL_CRITERIA_NUMBERS
 from perception.contact.contact_config import ContactConfig
 from perception.contact.contact_types import (
     DistanceObservation,
@@ -156,7 +157,10 @@ class TestSyntheticScenarios(unittest.TestCase):
             eligibility_duration_seconds=2.0,
             tracking_loss_timeout_seconds=5.0,
         )
-        self.engine = ReadinessEngine(config=self.config)
+        self.engine = ReadinessEngine(
+            config=self.config,
+            criteria_selection=ALL_CRITERIA_NUMBERS,
+        )
         self.box = (300.0, 200.0, 500.0, 600.0)
         self.det = PersonDetection(bbox_xyxy=self.box, confidence=0.95, class_id=0)
 

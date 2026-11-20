@@ -260,9 +260,11 @@ class PersonDetector:
 
     COCO_PERSON_CLASS_ID: int = 0
 
+    DEFAULT_MODEL_PATH: str = "models/yolov8n.pt"
+
     def __init__(
         self,
-        model_path: str = "yolov8n.pt",
+        model_path: str = "models/yolov8n.pt",
         confidence_threshold: float = 0.5,
         device: Optional[str] = None,
         smoother: Optional[SinglePersonSmoother] = None,
@@ -270,7 +272,7 @@ class PersonDetector:
         """Initialize the person detector.
 
         Args:
-            model_path: Path to the YOLOv8 weights file (defaults to 'yolov8n.pt').
+            model_path: Path to the YOLOv8 weights file (defaults to 'models/yolov8n.pt').
             confidence_threshold: Minimum detection confidence in [0.0, 1.0] (fixed at 0.5 for M1/M2).
             device: Optional PyTorch device string (e.g. 'cpu', 'cuda:0').
             smoother: Optional SinglePersonSmoother instance for EMA bounding-box stabilization.
@@ -282,10 +284,19 @@ class PersonDetector:
         """
         resolved_path = Path(model_path)
         if not resolved_path.is_file():
-            # Fallback to checking relative to the repository root
+            # Fallback to checking relative to the repository root and models directory
             repo_root = Path(__file__).resolve().parents[2]
-            if (repo_root / model_path).is_file():
-                resolved_path = repo_root / model_path
+            candidates = [
+                repo_root / model_path,
+                repo_root / "models" / model_path,
+                repo_root / "models" / Path(model_path).name,
+                Path("models") / model_path,
+                Path("models") / Path(model_path).name,
+            ]
+            for candidate in candidates:
+                if candidate.is_file():
+                    resolved_path = candidate
+                    break
             else:
                 raise FileNotFoundError(f"Model weights file not found: {model_path}")
 

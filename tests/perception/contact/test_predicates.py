@@ -1,6 +1,9 @@
 """Unit tests for individual readiness predicates and explainable reason codes."""
 
+from __future__ import annotations
+
 import unittest
+from typing import Optional
 
 from perception.contact.contact_config import ContactConfig
 from perception.contact.contact_types import (
@@ -92,11 +95,12 @@ def _make_temporal_obs(
     approach_val: ApproachValue = ApproachValue.APPROACHING,
     approach_stat: ObservationStatus = ObservationStatus.VALID,
     timestamp: float = 10.0,
+    track_id: Optional[int] = 1,
 ) -> TemporalObservation:
     """Construct synthetic TemporalObservation."""
     return TemporalObservation(
         timestamp=timestamp,
-        track_id=1,
+        track_id=track_id,
         observed=True,
         approach=Observation(value=approach_val, confidence=None, status=approach_stat),
         movement=Observation(value=movement_val, confidence=None, status=movement_stat),
@@ -104,6 +108,23 @@ def _make_temporal_obs(
         motion=MotionMetrics(),
         initialization_state=InitializationState.READY,
         initialization_count=5,
+    )
+
+
+def _make_dist_obs(
+    distance_m: float = 1.2,
+    source: DistanceSource = DistanceSource.MOCK,
+    status: ObservationStatus = ObservationStatus.VALID,
+    timestamp: float = 10.0,
+    track_id: Optional[int] = 1,
+) -> DistanceObservation:
+    """Construct synthetic DistanceObservation with explicit target association."""
+    return DistanceObservation(
+        distance_m=distance_m,
+        source=source,
+        status=status,
+        timestamp=timestamp,
+        track_id=track_id,
     )
 
 
@@ -135,13 +156,14 @@ class TestPredicates(unittest.TestCase):
             frame_observation=_make_frame_obs(bbox=self.box, timestamp=10.0),
             temporal_observation=_make_temporal_obs(timestamp=10.0),
             timestamp=10.0,
+            matched_detection=self.det,
         )
 
     def test_all_seven_predicates_valid(self) -> None:
         """Verify when all conditions are satisfied, all predicates evaluate True."""
         f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist_obs = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist_obs = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -167,7 +189,7 @@ class TestPredicates(unittest.TestCase):
         """Verify missing person presence makes P=False and emits NO_PERSON."""
         f_obs = _make_frame_obs(presence_val=PersonPresenceValue.NOT_DETECTED, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -198,7 +220,7 @@ class TestPredicates(unittest.TestCase):
         )
         f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=coasting_track,
@@ -217,7 +239,7 @@ class TestPredicates(unittest.TestCase):
         diff_det = PersonDetection(bbox_xyxy=(10.0, 10.0, 50.0, 100.0), confidence=0.8, class_id=0)
         f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -235,7 +257,7 @@ class TestPredicates(unittest.TestCase):
         """Verify person outside interaction zone fails Z with OUTSIDE_INTERACTION_ZONE."""
         f_obs = _make_frame_obs(zone_val=InteractionZoneValue.OUTSIDE, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -254,7 +276,7 @@ class TestPredicates(unittest.TestCase):
         f_obs = _make_frame_obs(timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
         # 2.2m exceeds 1.5m threshold
-        dist = DistanceObservation(distance_m=2.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(distance_m=2.2, timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -287,7 +309,7 @@ class TestPredicates(unittest.TestCase):
         self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons1)
 
         # Distance UNCERTAIN -> DISTANCE_UNRELIABLE
-        dist_unc = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.UNCERTAIN, timestamp=10.0)
+        dist_unc = _make_dist_obs(distance_m=1.2, status=ObservationStatus.UNCERTAIN, timestamp=10.0)
         preds2, reasons2 = self.evaluator.evaluate(
             track=self.track,
             matched_detection=self.det,
@@ -304,7 +326,7 @@ class TestPredicates(unittest.TestCase):
         """Verify MOVING state fails S with PERSON_MOVING."""
         f_obs = _make_frame_obs(timestamp=10.0)
         t_obs = _make_temporal_obs(movement_val=MovementValue.MOVING, timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -322,7 +344,7 @@ class TestPredicates(unittest.TestCase):
         """Verify NOT_FACING_ROBOT fails O with NOT_FACING_ROBOT."""
         f_obs = _make_frame_obs(orient_val=HeadOrientationValue.NOT_FACING_ROBOT, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -341,7 +363,7 @@ class TestPredicates(unittest.TestCase):
         # Frame timestamp is 10.0, evaluation timestamp is 11.0 (difference 1.0s > 0.5s)
         f_obs = _make_frame_obs(timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -374,8 +396,8 @@ class TestPredicates(unittest.TestCase):
         )
         det2 = PersonDetection(bbox_xyxy=(50.0, 50.0, 150.0, 250.0), confidence=0.9, class_id=0)
         f_obs = _make_frame_obs(bbox=(50.0, 50.0, 150.0, 250.0), timestamp=10.0)
-        t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0, track_id=2)
+        dist = _make_dist_obs(timestamp=10.0, track_id=2)
 
         preds, reasons = self.evaluator.evaluate(
             track=track2,
@@ -405,7 +427,7 @@ class TestPredicates(unittest.TestCase):
             initialization_state=InitializationState.READY,
             initialization_count=5,
         )
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -420,12 +442,90 @@ class TestPredicates(unittest.TestCase):
         self.assertFalse(preds.is_all_valid)
         self.assertIn(ReasonCode.TARGET_MISMATCH, reasons)
 
+    def test_missing_temporal_track_id_fails_closed(self) -> None:
+        """Verify missing temporal track_id fails S with TARGET_MISMATCH."""
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs_no_id = _make_temporal_obs(timestamp=10.0, track_id=None)
+        dist = _make_dist_obs(timestamp=10.0)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs_no_id,
+            distance_observation=dist,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.s_stationary)
+        self.assertIn(ReasonCode.TARGET_MISMATCH, reasons)
+
+    def test_missing_distance_track_id_fails_closed(self) -> None:
+        """Verify missing distance track_id fails D with TARGET_MISMATCH."""
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist_no_id = _make_dist_obs(timestamp=10.0, track_id=None)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist_no_id,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.TARGET_MISMATCH, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
+
+    def test_mismatched_distance_track_id_fails_closed(self) -> None:
+        """Verify mismatched distance track_id fails D with TARGET_MISMATCH."""
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist_mismatched = _make_dist_obs(timestamp=10.0, track_id=99)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist_mismatched,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.TARGET_MISMATCH, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
+
+    def test_missing_matched_detection_fails_closed(self) -> None:
+        """Verify missing matched_detection fails closed without fallback to track bbox."""
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=None,  # Missing matched detection!
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.b_bbox)
+        self.assertFalse(preds.z_zone)
+        self.assertFalse(preds.o_orientation)
+        self.assertFalse(preds.is_all_valid)
+        self.assertIn(ReasonCode.TARGET_MISMATCH, reasons)
+        self.assertIn(ReasonCode.INVALID_BBOX, reasons)
+
     def test_stale_m5_temporal_observation(self) -> None:
         """Verify stale temporal observation fails S with STALE_OBSERVATION / TIMESTAMP_MISMATCH."""
         f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
         # Temporal observation timestamp is 8.0s (2.0s stale)
         t_obs_stale = _make_temporal_obs(timestamp=8.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -444,7 +544,7 @@ class TestPredicates(unittest.TestCase):
         f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
         # Distance observation timestamp is 7.0s (3.0s stale)
-        dist_stale = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=7.0)
+        dist_stale = _make_dist_obs(timestamp=7.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=self.track,
@@ -476,7 +576,7 @@ class TestPredicates(unittest.TestCase):
         )
         f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         preds, reasons = self.evaluator.evaluate(
             track=track_mismatched,
@@ -494,7 +594,7 @@ class TestPredicates(unittest.TestCase):
         """Verify non-finite timestamps (NaN, inf) fail closed with INVALID_TIMESTAMP."""
         f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
         t_obs = _make_temporal_obs(timestamp=10.0)
-        dist = DistanceObservation(distance_m=1.2, source=DistanceSource.MOCK, status=ObservationStatus.VALID, timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0)
 
         # NaN timestamp
         preds_nan, reasons_nan = self.evaluator.evaluate(
@@ -521,6 +621,156 @@ class TestPredicates(unittest.TestCase):
         )
         self.assertFalse(preds_inf.is_all_valid)
         self.assertIn(ReasonCode.INVALID_TIMESTAMP, reasons_inf)
+
+    def test_distance_timestamp_matches_captured_frame(self) -> None:
+        """Verify distance observation matching captured-frame timestamp satisfies Predicate D."""
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0, track_id=1)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertTrue(preds.d_distance)
+        self.assertNotIn(ReasonCode.TIMESTAMP_MISMATCH, reasons)
+        self.assertNotIn(ReasonCode.STALE_OBSERVATION, reasons)
+
+    def test_distance_timestamp_stale_relative_to_engine_timestamp(self) -> None:
+        """Verify distance observation stale relative to engine timestamp fails D with STALE_OBSERVATION."""
+        # Frame is at 10.0, engine evaluated at 10.0, but distance observation is at 8.0 (>0.5s stale)
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist_stale = _make_dist_obs(timestamp=8.0, track_id=1)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist_stale,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.STALE_OBSERVATION, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
+
+    def test_distance_timestamp_inconsistent_with_captured_frame(self) -> None:
+        """Verify distance observation inconsistent with captured-frame timestamp fails D with TIMESTAMP_MISMATCH."""
+        # Engine timestamp is 10.0, distance is 10.0 (fresh relative to engine),
+        # but captured frame metadata timestamp is 8.0 (inconsistent frame)
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=8.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0, track_id=1)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.TIMESTAMP_MISMATCH, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
+
+    def test_distance_timestamp_missing(self) -> None:
+        """Verify distance observation with missing timestamp (None) fails D with INVALID_TIMESTAMP."""
+        from unittest.mock import MagicMock
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        mock_dist = MagicMock(
+            distance_m=1.2,
+            source=DistanceSource.MOCK,
+            status=ObservationStatus.VALID,
+            timestamp=None,
+            track_id=1,
+        )
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=mock_dist,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
+
+    def test_distance_timestamp_non_finite(self) -> None:
+        """Verify distance observation with non-finite timestamp fails D with INVALID_TIMESTAMP."""
+        from unittest.mock import MagicMock
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        mock_dist_nan = MagicMock(
+            distance_m=1.2,
+            source=DistanceSource.MOCK,
+            status=ObservationStatus.VALID,
+            timestamp=float("nan"),
+            track_id=1,
+        )
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=mock_dist_nan,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.INVALID_TIMESTAMP, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
+
+    def test_distance_target_identity_missing_fails_closed(self) -> None:
+        """Verify distance observation with track_id=None fails closed when active target is locked."""
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0, track_id=None)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.TARGET_MISMATCH, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
+
+    def test_distance_target_identity_mismatched_fails_closed(self) -> None:
+        """Verify distance observation with mismatched track_id fails closed."""
+        f_obs = _make_frame_obs(bbox=self.box, timestamp=10.0)
+        t_obs = _make_temporal_obs(timestamp=10.0)
+        dist = _make_dist_obs(timestamp=10.0, track_id=99)
+
+        preds, reasons = self.evaluator.evaluate(
+            track=self.track,
+            matched_detection=self.det,
+            frame_observation=f_obs,
+            temporal_observation=t_obs,
+            distance_observation=dist,
+            visit_manager=self.visit_manager,
+            timestamp=10.0,
+        )
+        self.assertFalse(preds.d_distance)
+        self.assertIn(ReasonCode.TARGET_MISMATCH, reasons)
+        self.assertIn(ReasonCode.DISTANCE_UNAVAILABLE, reasons)
 
 
 if __name__ == "__main__":

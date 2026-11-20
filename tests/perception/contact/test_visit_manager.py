@@ -33,6 +33,7 @@ from perception.temporal.observation_types import (
     StabilityValue,
     TemporalObservation,
 )
+from perception.detection.person_detector import PersonDetection
 from perception.tracking.single_person_tracker import Track, TrackState
 
 
@@ -66,16 +67,18 @@ def _make_dummy_frame_obs(
     zone_val: InteractionZoneValue = InteractionZoneValue.INSIDE,
     zone_status: ObservationStatus = ObservationStatus.VALID,
     timestamp: float = 1.0,
+    bbox: tuple[float, float, float, float] = (100.0, 100.0, 300.0, 500.0),
 ) -> FrameObservation:
     """Helper to construct dummy FrameObservation."""
-    bbox = (100.0, 100.0, 300.0, 500.0)
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
     metrics = BboxMetrics(
         original_bbox_xyxy=bbox,
         clipped_bbox_xyxy=bbox,
-        width=200.0,
-        height=400.0,
-        area=80000.0,
-        area_ratio=80000.0 / (1280 * 720),
+        width=w,
+        height=h,
+        area=w * h,
+        area_ratio=(w * h) / (1280 * 720),
         image_width=1280,
         image_height=720,
     )
@@ -185,38 +188,45 @@ class TestVisitManager(unittest.TestCase):
     def test_initial_presence_path(self) -> None:
         """Verify startup / arrival directly in interaction zone sets approach_or_presence."""
         vm = VisitManager()
-        track = _make_track(track_id=10, bbox=(100.0, 100.0, 300.0, 500.0), observed=True)
+        box = (100.0, 100.0, 300.0, 500.0)
+        track = _make_track(track_id=10, bbox=box, observed=True)
+        det = PersonDetection(bbox_xyxy=box, confidence=0.92, class_id=0)
         frame_obs = _make_dummy_frame_obs(
+            bbox=box,
             presence_val=PersonPresenceValue.DETECTED,
             presence_status=ObservationStatus.VALID,
             zone_val=InteractionZoneValue.INSIDE,
             zone_status=ObservationStatus.VALID,
         )
 
-        vm.update(track, frame_obs, None, timestamp=1.0)
+        vm.update(track, frame_obs, None, timestamp=1.0, matched_detection=det)
         self.assertTrue(vm.approach_or_presence_established)
 
     def test_confirmed_approach_path(self) -> None:
         """Verify M5 confirmed approach sets approach_or_presence_established."""
         vm = VisitManager()
-        track = _make_track(track_id=10, bbox=(100.0, 100.0, 300.0, 500.0), observed=True)
-        frame_obs = _make_dummy_frame_obs(zone_val=InteractionZoneValue.OUTSIDE)
+        box = (100.0, 100.0, 300.0, 500.0)
+        track = _make_track(track_id=10, bbox=box, observed=True)
+        det = PersonDetection(bbox_xyxy=box, confidence=0.92, class_id=0)
+        frame_obs = _make_dummy_frame_obs(bbox=box, zone_val=InteractionZoneValue.OUTSIDE)
         temp_obs = _make_dummy_temporal_obs(
             approach_val=ApproachValue.APPROACHING,
             approach_status=ObservationStatus.VALID,
             track_id=10,
         )
 
-        vm.update(track, frame_obs, temp_obs, timestamp=1.0)
+        vm.update(track, frame_obs, temp_obs, timestamp=1.0, matched_detection=det)
         self.assertTrue(vm.approach_or_presence_established)
 
     def test_approach_persistence_across_state_changes(self) -> None:
         """Verify once approach/presence is established, it persists for the visit."""
         vm = VisitManager()
-        track = _make_track(track_id=10, bbox=(100.0, 100.0, 300.0, 500.0), observed=True)
-        frame_obs = _make_dummy_frame_obs(zone_val=InteractionZoneValue.INSIDE)
+        box = (100.0, 100.0, 300.0, 500.0)
+        track = _make_track(track_id=10, bbox=box, observed=True)
+        det = PersonDetection(bbox_xyxy=box, confidence=0.92, class_id=0)
+        frame_obs = _make_dummy_frame_obs(bbox=box, zone_val=InteractionZoneValue.INSIDE)
 
-        vm.update(track, frame_obs, None, timestamp=1.0)
+        vm.update(track, frame_obs, None, timestamp=1.0, matched_detection=det)
         self.assertTrue(vm.approach_or_presence_established)
 
         # Later frame: temporal approach says UNKNOWN / NOT_APPROACHING
@@ -225,7 +235,7 @@ class TestVisitManager(unittest.TestCase):
             approach_status=ObservationStatus.UNCERTAIN,
             track_id=10,
         )
-        vm.update(track, frame_obs, temp_obs_stationary, timestamp=1.5)
+        vm.update(track, frame_obs, temp_obs_stationary, timestamp=1.5, matched_detection=det)
         self.assertTrue(vm.approach_or_presence_established)
 
     def test_target_locking(self) -> None:
@@ -298,18 +308,21 @@ class TestVisitManager(unittest.TestCase):
     def test_reliable_zone_exit_terminates_immediately(self) -> None:
         """Verify OUTSIDE + VALID interaction zone terminates visit immediately."""
         vm = VisitManager()
-        track = _make_track(track_id=7, bbox=(100.0, 100.0, 300.0, 500.0), observed=True)
-        frame_obs_inside = _make_dummy_frame_obs(zone_val=InteractionZoneValue.INSIDE)
+        box = (100.0, 100.0, 300.0, 500.0)
+        track = _make_track(track_id=7, bbox=box, observed=True)
+        det = PersonDetection(bbox_xyxy=box, confidence=0.92, class_id=0)
+        frame_obs_inside = _make_dummy_frame_obs(bbox=box, zone_val=InteractionZoneValue.INSIDE)
 
-        vm.update(track, frame_obs_inside, None, timestamp=1.0)
+        vm.update(track, frame_obs_inside, None, timestamp=1.0, matched_detection=det)
         self.assertTrue(vm.has_active_visit)
 
         # Person steps OUTSIDE (VALID)
         frame_obs_outside = _make_dummy_frame_obs(
+            bbox=box,
             zone_val=InteractionZoneValue.OUTSIDE,
             zone_status=ObservationStatus.VALID,
         )
-        v_out, is_act = vm.update(track, frame_obs_outside, None, timestamp=1.1)
+        v_out, is_act = vm.update(track, frame_obs_outside, None, timestamp=1.1, matched_detection=det)
 
         self.assertIsNone(v_out)
         self.assertFalse(is_act)
@@ -319,21 +332,72 @@ class TestVisitManager(unittest.TestCase):
     def test_zone_exit_without_valid_status_does_not_terminate(self) -> None:
         """Verify OUTSIDE with UNCERTAIN/INVALID status does not terminate visit."""
         vm = VisitManager()
-        track = _make_track(track_id=7, bbox=(100.0, 100.0, 300.0, 500.0), observed=True)
-        frame_obs_inside = _make_dummy_frame_obs(zone_val=InteractionZoneValue.INSIDE)
+        box = (100.0, 100.0, 300.0, 500.0)
+        track = _make_track(track_id=7, bbox=box, observed=True)
+        det = PersonDetection(bbox_xyxy=box, confidence=0.92, class_id=0)
+        frame_obs_inside = _make_dummy_frame_obs(bbox=box, zone_val=InteractionZoneValue.INSIDE)
 
-        vm.update(track, frame_obs_inside, None, timestamp=1.0)
+        vm.update(track, frame_obs_inside, None, timestamp=1.0, matched_detection=det)
 
         # UNCERTAIN outside
         frame_obs_uncertain = _make_dummy_frame_obs(
+            bbox=box,
             zone_val=InteractionZoneValue.OUTSIDE,
             zone_status=ObservationStatus.UNCERTAIN,
         )
-        v_unc, is_act = vm.update(track, frame_obs_uncertain, None, timestamp=1.1)
+        v_unc, is_act = vm.update(track, frame_obs_uncertain, None, timestamp=1.1, matched_detection=det)
 
         self.assertIsNotNone(v_unc)
         self.assertTrue(is_act)
         self.assertTrue(vm.has_active_visit)
+
+    def test_missing_matched_detection_does_not_establish_initial_presence(self) -> None:
+        """Verify missing matched_detection fails closed: initial presence is NOT established."""
+        vm = VisitManager()
+        track = _make_track(track_id=10, bbox=(100.0, 100.0, 300.0, 500.0), observed=True)
+        frame_obs = _make_dummy_frame_obs(
+            presence_val=PersonPresenceValue.DETECTED,
+            presence_status=ObservationStatus.VALID,
+            zone_val=InteractionZoneValue.INSIDE,
+            zone_status=ObservationStatus.VALID,
+        )
+        vm.update(track, frame_obs, None, timestamp=1.0, matched_detection=None)
+        self.assertFalse(vm.approach_or_presence_established)
+
+    def test_missing_matched_detection_does_not_terminate_on_outside(self) -> None:
+        """Verify missing matched_detection fails closed: cannot terminate active visit."""
+        vm = VisitManager()
+        box = (100.0, 100.0, 300.0, 500.0)
+        track = _make_track(track_id=7, bbox=box, observed=True)
+        det = PersonDetection(bbox_xyxy=box, confidence=0.92, class_id=0)
+        frame_obs_inside = _make_dummy_frame_obs(bbox=box, zone_val=InteractionZoneValue.INSIDE)
+        vm.update(track, frame_obs_inside, None, timestamp=1.0, matched_detection=det)
+        self.assertTrue(vm.has_active_visit)
+
+        frame_obs_outside = _make_dummy_frame_obs(
+            bbox=box,
+            zone_val=InteractionZoneValue.OUTSIDE,
+            zone_status=ObservationStatus.VALID,
+        )
+        v_out, _ = vm.update(track, frame_obs_outside, None, timestamp=1.1, matched_detection=None)
+        # Should NOT terminate because identity could not be established without matched_detection!
+        self.assertIsNotNone(v_out)
+        self.assertTrue(vm.has_active_visit)
+
+    def test_missing_temporal_track_id_does_not_confirm_approach(self) -> None:
+        """Verify temporal observation with track_id=None does not confirm approach."""
+        vm = VisitManager()
+        box = (100.0, 100.0, 300.0, 500.0)
+        track = _make_track(track_id=10, bbox=box, observed=True)
+        det = PersonDetection(bbox_xyxy=box, confidence=0.92, class_id=0)
+        frame_obs = _make_dummy_frame_obs(bbox=box, zone_val=InteractionZoneValue.OUTSIDE)
+        temp_obs_no_id = _make_dummy_temporal_obs(
+            approach_val=ApproachValue.APPROACHING,
+            approach_status=ObservationStatus.VALID,
+            track_id=None,
+        )
+        vm.update(track, frame_obs, temp_obs_no_id, timestamp=1.0, matched_detection=det)
+        self.assertFalse(vm.approach_or_presence_established)
 
     def test_event_emitted_tracking(self) -> None:
         """Verify event_emitted flag can be marked and is preserved."""

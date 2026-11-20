@@ -145,8 +145,8 @@ class TestPersonDetectorInit(unittest.TestCase):
 
     def test_invalid_confidence_threshold_raises_value_error(self) -> None:
         """Verify invalid confidence thresholds are rejected."""
-        # Use existing yolov8n.pt or dummy file
-        valid_model = "yolov8n.pt"
+        # Use existing models/yolov8n.pt or fallback
+        valid_model = "models/yolov8n.pt" if Path("models/yolov8n.pt").is_file() else "yolov8n.pt"
         if not Path(valid_model).is_file():
             self.skipTest(f"{valid_model} not present for threshold test")
 

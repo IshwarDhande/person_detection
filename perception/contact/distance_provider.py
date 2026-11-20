@@ -17,6 +17,11 @@ from perception.readiness.observation_types import ObservationStatus
 class DistanceProvider(ABC):
     """Abstract base class for distance providers consumed by M6."""
 
+    @property
+    def supports_target_association(self) -> bool:
+        """True if this provider associates distance measurements with target track IDs."""
+        return True
+
     @abstractmethod
     def get_distance(
         self,

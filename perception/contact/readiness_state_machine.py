@@ -8,15 +8,17 @@ according to Section 6 and 7 of the M6 specification.
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import Optional, Union
 import uuid
 
 from perception.contact.contact_types import (
+    DemoCriteriaReadyEvent,
     DistanceInfo,
     DistanceObservation,
     FirstContactReadyEvent,
     ReadinessState,
 )
+from perception.contact.criteria_selection import ALL_CRITERIA_NUMBERS, DEFAULT_CRITERIA_NUMBERS
 from perception.contact.eligibility_timer import EligibilityTimer
 from perception.contact.visit_manager import VisitManager
 
@@ -79,7 +81,9 @@ class ReadinessStateMachine:
         track_id: Optional[int],
         distance_obs: Optional[DistanceObservation],
         timestamp: float,
-    ) -> tuple[ReadinessState, Optional[FirstContactReadyEvent], float]:
+        is_active_target_observed: bool = True,
+        selected_criteria: Optional[frozenset[int] | tuple[int, ...] | set[int]] = None,
+    ) -> tuple[ReadinessState, Optional[Union[FirstContactReadyEvent, DemoCriteriaReadyEvent]], float]:
         """Update readiness state machine for current frame.
 
         Args:
@@ -88,6 +92,7 @@ class ReadinessStateMachine:
             track_id: Active M3 track identifier, or None.
             distance_obs: Current DistanceObservation, or None.
             timestamp: Monotonic frame timestamp in seconds.
+            is_active_target_observed: Explicit observation status of locked target from VisitManager.
 
         Returns:
             (state, event, elapsed_eligibility) tuple.
@@ -116,8 +121,8 @@ class ReadinessStateMachine:
 
         event: Optional[FirstContactReadyEvent] = None
 
-        # Condition broken / unsatisfied: reset timer, transition to NOT_READY (revocable)
-        if not is_all_valid:
+        # Condition broken, unsatisfied, or active target unobserved: reset timer, transition to NOT_READY (revocable)
+        if not is_all_valid or not is_active_target_observed:
             self._timer.reset()
             self._eligible_since = None
             self._ready_since = None
@@ -155,17 +160,36 @@ class ReadinessStateMachine:
             dist_val = distance_obs.distance_m if distance_obs is not None else 0.0
             dist_src = distance_obs.source.value if distance_obs is not None else "MOCK"
 
-            event = FirstContactReadyEvent(
-                event_id=f"evt_{uuid.uuid4().hex[:8]}",
-                visit_id=active_visit_id,
-                track_id=track_id,
-                timestamp=timestamp,
-                readiness_duration=self._timer.required_duration_seconds,
-                distance=DistanceInfo(
-                    value_m=dist_val,
-                    source=dist_src,
-                ),
+            # Both the default {1, 2, 7} gate and all 7 criteria emit production FIRST_CONTACT_READY
+            is_production_event = (
+                selected_criteria is None
+                or set(selected_criteria) in (DEFAULT_CRITERIA_NUMBERS, ALL_CRITERIA_NUMBERS)
             )
+            if is_production_event:
+                event = FirstContactReadyEvent(
+                    event_id=f"evt_{uuid.uuid4().hex[:8]}",
+                    visit_id=active_visit_id,
+                    track_id=track_id,
+                    timestamp=timestamp,
+                    readiness_duration=self._timer.required_duration_seconds,
+                    distance=DistanceInfo(
+                        value_m=dist_val,
+                        source=dist_src,
+                    ),
+                )
+            else:
+                event = DemoCriteriaReadyEvent(
+                    event_id=f"demo_evt_{uuid.uuid4().hex[:8]}",
+                    visit_id=active_visit_id,
+                    track_id=track_id,
+                    timestamp=timestamp,
+                    readiness_duration=self._timer.required_duration_seconds,
+                    distance=DistanceInfo(
+                        value_m=dist_val,
+                        source=dist_src,
+                    ),
+                    selected_criteria=tuple(sorted(selected_criteria)),
+                )
             visit_manager.mark_event_emitted()
 
         return self._state, event, elapsed

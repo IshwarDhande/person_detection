@@ -5,7 +5,7 @@
 **Milestone:** M6 — Readiness-Based Single-Person First Contact  
 **System:** Vision-Based First Contact — Reception Social Robot  
 **Authoritative Specification:** [`docs/m6_readiness_single_person_first_contact.md`](file:///home/eshwar/code/detection/docs/m6_readiness_single_person_first_contact.md)  
-**Implementation Status:** Complete, Hardened & Verified (328/328 Repository Tests Passing, 97/97 M6 Tests Passing)  
+**Implementation Status:** Complete, Hardened & Verified (353/353 Repository Tests Passing, 122/122 M6 Tests Passing)  
 
 ---
 
@@ -279,13 +279,13 @@ The complete M6 test suite comprises **97 dedicated unit, integration, and scena
 | [`test_contact_config.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_contact_config.py) | 10 | Default configs, NaN/inf validation, YAML parsing, production safeguards, inter-frame gap | Pass |
 | [`test_distance_provider.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_distance_provider.py) | 4 | Mock distance mutation, metric fail-closed uncalibrated status, track_id propagation | Pass |
 | [`test_eligibility_timer.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_eligibility_timer.py) | 11 | Monotonic timing, failure reset, max inter-frame gap reset, NaN/inf safety | Pass |
-| [`test_predicates.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_predicates.py) | 16 | Target identity gating, stale frame checks, timestamp mismatch, reason codes | Pass |
-| [`test_visit_manager.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_visit_manager.py) | 16 | Target locking, 5s grace period, other-person zone exit isolation, approach persistence | Pass |
+| [`test_predicates.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_predicates.py) | 27 | Target identity gating, stale frame checks, timestamp mismatch, distance frame consistency | Pass |
+| [`test_visit_manager.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_visit_manager.py) | 19 | Target locking, 5s grace period, other-person zone exit isolation, approach persistence | Pass |
 | [`test_readiness_state_machine.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_readiness_state_machine.py) | 10 | NOT_READY $\leftrightarrow$ PENDING $\leftrightarrow$ READY, revocability, one-shot event generation | Pass |
-| [`test_readiness_engine.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_readiness_engine.py) | 8 | Pipeline orchestration, predicate evaluation, latency instrumentation, reset | Pass |
+| [`test_readiness_engine.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_readiness_engine.py) | 19 | Pipeline orchestration, global monotonicity boundary, distance consistency, reset | Pass |
 | [`test_synthetic_scenarios.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_synthetic_scenarios.py) | 7 | Scenarios A–G (approach, startup presence, tracking loss, timeout, recovery, multi-person) | Pass |
 | [`test_contact_demo_runner.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_contact_demo_runner.py) | 7 | CLI parsing, parameter verification, camera failure cleanup, bounded runner | Pass |
-| **Total M6 Dedicated Tests** | **97** | **Complete Decision & Integration Coverage** | **100% Pass** |
+| **Total M6 Dedicated Tests** | **122** | **Complete Decision & Integration Coverage** | **100% Pass** |
 
 ### 8.2 Full Repository Milestone Regression Test Summary
 
@@ -294,14 +294,13 @@ The complete M6 test suite comprises **97 dedicated unit, integration, and scena
 |                               FULL REPOSITORY TEST BREAKDOWN (M1–M6)                               |
 +----------------------------------------------------------------------------------------------------+
 |                                                                                                    |
-|   Milestone M1: Basic Person Detection Tests ....................................  21 Passed       |
-|   Milestone M2: BBox Smoothing & Calibration Tests ...............................  38 Passed       |
-|   Milestone M3: Single-Person Kalman Tracking Tests ..............................  48 Passed       |
-|   Milestone M4: Frame-Level Readiness & Face Landmarker Tests ...................  46 Passed       |
+|   Milestone M1: Basic Person Detection & BBox Tests .............................  49 Passed       |
+|   Milestone M3: Single-Person Kalman Tracking Tests ..............................  41 Passed       |
+|   Milestone M4: Frame-Level Readiness & Face Landmarker Tests ...................  63 Passed       |
 |   Milestone M5: Temporal Behaviour & Approach Tracking Tests ....................  78 Passed       |
-|   Milestone M6: Readiness-Based Single-Person First Contact Tests ...............  97 Passed       |
+|   Milestone M6: Readiness-Based Single-Person First Contact Tests ............... 122 Passed       |
 |                                                                                                    |
-|   TOTAL REPOSITORY AUTOMATED TESTS: ............................................ 328 PASSED (100%) |
+|   TOTAL REPOSITORY AUTOMATED TESTS: ............................................ 353 PASSED (100%) |
 |   REGRESSION FAILURES: .........................................................   0               |
 |                                                                                                    |
 +----------------------------------------------------------------------------------------------------+
@@ -443,6 +442,127 @@ In [`perception/contact/run_first_contact_demo.py`](file:///home/eshwar/code/det
 In [`perception/contact/contact_config.py`](file:///home/eshwar/code/detection/perception/contact/contact_config.py):
 - Added explicit checks rejecting `math.isnan()` and `math.isinf()` across all float configurations (`eligibility_duration_seconds`, `tracking_loss_timeout_seconds`, `distance_max_m`, `mock_distance_m`, `observation_freshness_seconds`, `max_inter_frame_gap_seconds`).
 - Rejects negative or non-positive parameters with descriptive `ValueError` messages.
+
+### 10.8 Final Acceptance Corrections Pass (Priority: P0)
+
+An exhaustive final acceptance audit identified subtle edge cases in identity propagation, engine-level error boundaries, and detection fallbacks. The following five architectural corrections were implemented and verified with targeted regression tests:
+
+```text
++----------------------------------------------------------------------------------------------------+
+|                                 FINAL ACCEPTANCE CORRECTIONS SUMMARY                               |
++----------------------------------------------------------------------------------------------------+
+|                                                                                                    |
+|  1. Strict Identity Association:                                                                   |
+|     - M5 Temporal: Explicit active track_id match required. None / mismatch fails closed.        |
+|     - M6 Distance: Explicit active track_id match required when supported.                        |
+|     - BBox Fallback Removed: No bounding-box equality alone as proof of identity.                 |
+|                                                                                                    |
+|  2. Fail-Closed Timestamp Error Handling:                                                          |
+|     - ReadinessEngine boundary catches non-monotonic ValueError, NaN, inf, and negative times.     |
+|     - Resets pending eligibility, returns NOT_READY with INVALID_TIMESTAMP, emits no event.        |
+|                                                                                                    |
+|  3. Explicit Active-Target Gating:                                                                 |
+|     - Engine propagates is_active_target_observed from VisitManager.update().                       |
+|     - Active target missing while bystander is visible blocks predicates and resets timer.         |
+|                                                                                                    |
+|  4. Frame Consistency vs Freshness:                                                                |
+|     - Freshness (time delta <= 0.5s) strictly separated from same-frame target association.        |
+|     - Positive evidence from past frames cannot satisfy current-frame predicates.                  |
+|                                                                                                    |
++----------------------------------------------------------------------------------------------------+
+```
+
+#### 10.8.1 Elimination of BBox-Equality Identity Fallback
+- **Problem**: When `matched_detection` was absent, `visit_manager.py` and `predicates.py` previously attempted a fallback comparison between `track.bbox_xyxy` and `m4_person.bbox_metrics.original_bbox_xyxy`. In multi-person or occlusion scenarios, coincidence of bounding-box geometry cannot prove track identity.
+- **Correction**: Removed all fallback comparisons based solely on bounding-box coordinates. Frame-level person association strictly requires an authenticated `matched_detection`. When absent, the system fails closed with `is_m4_active_person = False`.
+- **Regressions**: `test_missing_matched_detection_fails_closed`, `test_missing_matched_detection_does_not_establish_initial_presence`, `test_missing_matched_detection_does_not_terminate_on_outside`.
+
+#### 10.8.2 Strict Target Association for Temporal and Distance Evidence
+- **Problem**: Distance observations and temporal observations could have `track_id = None`, which previously might have silently bypassed identity mismatch gating.
+- **Correction**:
+  - `DistanceProvider.supports_target_association` property explicitly returns `True`.
+  - In `predicates.py`, if `distance_observation.track_id is None or distance_observation.track_id != active_track_id`, predicate $D$ immediately evaluates to `False` with `ReasonCode.TARGET_MISMATCH` and `ReasonCode.DISTANCE_UNAVAILABLE`.
+  - For M5 temporal observations, if `temporal_observation.track_id is None or temporal_observation.track_id != active_track_id`, predicates $A$ and $S$ fail with `TARGET_MISMATCH`. Missing identity is strictly rejected and never assumed to match.
+- **Regressions**: `test_missing_temporal_track_id_fails_closed`, `test_missing_distance_track_id_fails_closed`, `test_mismatched_distance_track_id_fails_closed`, `test_missing_temporal_track_id_does_not_confirm_approach`.
+
+#### 10.8.3 Fail-Closed Engine Boundary Exception Protection & Non-Monotonic Timestamps
+- **Problem**: `EligibilityTimer.update()` raises a `ValueError` upon detecting non-monotonic timestamps ($t < t_{\text{prev}}$). If uncaught, this exception would bubble up through `ReadinessEngine.evaluate()` and terminate the demo runner. Additionally, non-finite (NaN, inf) or negative timestamps could reach internal components.
+- **Correction**:
+  - At the entry point of `ReadinessEngine.evaluate()`, timestamps are validated against `isinstance(timestamp, (int, float)) and math.isfinite(timestamp) and timestamp >= 0`. Non-compliant timestamps trigger immediate `self.state_machine.reset()` and return `ReadinessState.NOT_READY` with `reasons=[ReasonCode.INVALID_TIMESTAMP]` and `event=None`.
+  - The entire decision pipeline in `evaluate()` is wrapped in a `try...except ValueError` block. Any non-monotonic timing fault is caught at the engine boundary, resetting pending eligibility, logging failure-closed metrics, and returning `ReasonCode.INVALID_TIMESTAMP` without unhandled exceptions.
+- **Regressions**: `test_non_monotonic_timestamp_fails_closed_at_engine_boundary`, `test_nan_inf_negative_timestamps_handled_fail_closed_at_engine_boundary`.
+
+#### 10.8.4 Explicit Active-Target Gating via VisitManager Observation Status
+- **Problem**: `ReadinessEngine.evaluate()` previously ignored the `is_active_target_observed` boolean returned by `VisitManager.update()`, relying solely on the raw `track.observed` flag of whatever track was passed in.
+- **Correction**: `is_active_target_observed` is now explicitly propagated through `predicate_evaluator.evaluate(...)` and `state_machine.update(...)`. If the locked active target disappears (even if a bystander's track is observed), `is_active_target_observed == False` prevents predicate satisfaction, resets the eligibility timer, and blocks event emission.
+- **Regression**: `test_active_target_disappears_while_another_person_visible_integration`.
+
+#### 10.8.5 Distinction between Temporal Freshness and Same-Frame Association
+- **Problem**: Temporal freshness (verifying that $|t_{\text{current}} - t_{\text{obs}}| \le 0.5\text{ s}$) does not inherently ensure that M3 tracking, M4 frame observation, M5 temporal behaviour, and M6 distance evidence correspond to the identical physical human in the current observation frame.
+- **Correction**: The pipeline explicitly enforces two orthogonal validation tiers:
+  1. *Frame Identity Association*: Active `track_id` match across M3, M4 (`matched_detection`), M5, and M6 distance.
+  2. *Temporal Freshness Gating*: Max inter-frame gap ($\le 0.5\text{ s}$) and timestamp divergence checks ($\le 0.5\text{ s}$).
+  No stale positive evidence can ever bridge across frames to satisfy current-frame predicates.
+
+### 10.9 Final Narrow Fixes & Initial-Presence Clarification Gate (Priority: P1)
+
+```text
++----------------------------------------------------------------------------------------------------+
+|                             FINAL NARROW FIXES & VALIDATION GATE ARCHITECTURE                      |
++----------------------------------------------------------------------------------------------------+
+|                                                                                                    |
+|  1. GLOBAL MONOTONIC TIMESTAMP VALIDATION (ReadinessEngine Boundary)                              |
+|     - Maintained self._last_accepted_timestamp independently of readiness state and timer state.  |
+|     - Rejects missing (None), non-finite (NaN, inf), negative, and backward/duplicate timestamps.  |
+|     - Rejections reset pending eligibility, return NOT_READY with INVALID_TIMESTAMP, no event.     |
+|     - Preserves last accepted timestamp so valid subsequent frames resume normally.                |
+|                                                                                                    |
+|  2. EXPLICIT DISTANCE TIMESTAMP CONSISTENCY AGAINST CAPTURED FRAME (Predicate D)                  |
+|     - Checks observation freshness: |t_engine - t_dist| <= freshness (STALE_OBSERVATION)           |
+|     - Checks frame consistency:     |t_frame  - t_dist| <= freshness (TIMESTAMP_MISMATCH)          |
+|     - Checks target association:    dist.track_id == active_track_id (TARGET_MISMATCH)             |
+|                                                                                                    |
+|  3. INITIAL-PRESENCE REQUIREMENTS CLARIFICATION GATE (Pending User Approval)                       |
+|     - Option A: Startup-only presence (frozen specification literal).                              |
+|     - Option B: Every new visit arrival directly in zone (current implementation behavior).        |
+|                                                                                                    |
++----------------------------------------------------------------------------------------------------+
+```
+
+#### 10.9.1 Global Monotonic Timestamp Validation at ReadinessEngine Boundary
+- **Problem**: The eligibility timer previously tracked timestamps only during accumulation. When the system was in `NOT_READY` or eligibility had already reset, backward timestamps could enter without being rejected by the timer.
+- **Implementation**:
+  - `ReadinessEngine` tracks `self._last_accepted_timestamp: Optional[float] = None`.
+  - Every incoming timestamp $t$ is validated: if $t$ is `None`, non-finite (`math.isnan(t)`, `math.isinf(t)`), negative ($t < 0$), or non-increasing relative to history ($t \le t_{\text{last}}$), the frame is rejected.
+  - Rejection triggers `self.state_machine.reset()`, returns `NOT_READY` with `reasons=[ReasonCode.INVALID_TIMESTAMP]`, `event=None`, `elapsed_eligibility=0.0`, and leaves `self._last_accepted_timestamp` untouched.
+  - On engine reset (`engine.reset()`), `self._last_accepted_timestamp` is cleared to `None`.
+- **Regressions**: `test_backward_timestamp_while_not_ready`, `test_backward_timestamp_while_pending`, `test_backward_timestamp_after_ready`, `test_duplicate_timestamp_rejected`, `test_missing_timestamp_rejected`, `test_valid_timestamp_following_invalid_timestamp`, `test_invalid_timestamp_never_produces_readiness_event`.
+
+#### 10.9.2 Explicit Distance Timestamp Consistency Against Captured Frame
+- **Problem**: Distance observations were previously checked only against the engine evaluation timestamp, leaving a potential inconsistency where an old or mismatched frame's distance measurement could be accepted if the engine clock drifted.
+- **Implementation**:
+  - In `PredicateEvaluator` (`perception/contact/predicates.py`), distance validation explicitly enforces three distinct gates:
+    1. *Freshness relative to engine*: $|t_{\text{engine}} - t_{\text{dist}}| \le t_{\text{freshness}} \implies \text{STALE\_OBSERVATION}$.
+    2. *Consistency with captured frame*: $|t_{\text{frame}} - t_{\text{dist}}| \le t_{\text{freshness}} \implies \text{TIMESTAMP\_MISMATCH}$.
+    3. *Target association*: $d_{\text{obs}}.\text{track\_id} == \text{active\_track\_id} \implies \text{TARGET\_MISMATCH}$.
+  - Any failure marks Predicate $D$ unsatisfied and appends `ReasonCode.DISTANCE_UNAVAILABLE`.
+- **Regressions**: `test_distance_timestamp_matches_captured_frame`, `test_distance_timestamp_stale_relative_to_engine_timestamp`, `test_distance_timestamp_inconsistent_with_captured_frame`, `test_distance_timestamp_missing`, `test_distance_timestamp_non_finite`, `test_distance_target_identity_missing_fails_closed`, `test_distance_target_identity_mismatched_fails_closed`, `test_invalid_distance_evidence_cannot_complete_eligibility`.
+
+#### 10.9.3 Initial-Presence Requirements Decision Analysis
+- **Code Inspection**: In [`perception/contact/visit_manager.py`](file:///home/eshwar/code/detection/perception/contact/visit_manager.py) (lines 194-205 and 243-251), `self._approach_or_presence_established` is evaluated whenever a new visit begins (`self._active_visit_id is None`) or when an existing visit has not yet satisfied $A$. The manager currently does not record a startup-only flag (`_is_startup`).
+- **Tests Currently Encoding Behavior**:
+  - [`tests/perception/contact/test_synthetic_scenarios.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_synthetic_scenarios.py) (`test_scenario_g_startup_presence_vs_subsequent_visit_presence`): Explicitly validates that Person 2 appearing directly inside the zone at $t = 5.0\text{ s}$ after Person 1 has exited has `approach_or_presence_established = True` and satisfies $A$.
+  - [`tests/perception/contact/test_visit_manager.py`](file:///home/eshwar/code/detection/tests/perception/contact/test_visit_manager.py) (`test_initial_presence_path`): Tests initial presence path on a freshly initialized `VisitManager`.
+- **Comparison of Options**:
+  - **Option A — Startup-only (Strict Specification Literal)**:
+    - *Definition*: Only the very first person present when the robot boots/initializes can satisfy $A$ via initial presence. All subsequent visitors entering after the initial visit must demonstrate an observed approach (`APPROACHING + VALID` from M5).
+    - *Consequence*: If visitor 1 exits, and visitor 2 enters the interaction zone while the robot's camera was paused, occluded, or if visitor 2 suddenly appears directly in the zone without being observed approaching outside, visitor 2 is permanently blocked from first contact until they leave the zone and approach again.
+    - *Affected Locations*: `visit_manager.py` (add `self._has_completed_startup_visit: bool`), update `test_scenario_g` to expect $A = \text{False}$ on visit 2 without approach.
+  - **Option B — Every New Visit (Permissive Practical Arrival)**:
+    - *Definition*: Any person present directly inside the interaction zone at the beginning of their visit satisfies $A$.
+    - *Consequence*: Prevents visitors who were already in front of the robot before their track/visit initiated from being stranded, regardless of whether they were the 1st, 2nd, or $N$-th visitor.
+    - *Affected Locations*: Current implementation in `visit_manager.py` and `test_scenario_g` already encode Option B.
+- **Decision Status**: Awaiting user approval before modifying behavior or specification.
 
 ---
 

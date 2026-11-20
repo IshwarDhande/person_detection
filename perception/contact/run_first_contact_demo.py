@@ -41,12 +41,20 @@ import psutil
 
 from perception.contact.contact_config import ContactConfig, load_contact_config
 from perception.contact.contact_types import (
+    DemoCriteriaReadyEvent,
     DistanceObservation,
     DistanceSource,
     FirstContactReadyEvent,
     FirstContactResult,
     ReadinessState,
     ReasonCode,
+)
+from perception.contact.criteria_selection import (
+    CRITERION_DETAILS,
+    CriteriaSelection,
+    DEFAULT_CRITERIA_NUMBERS,
+    add_criteria_arguments,
+    resolve_criteria_selection,
 )
 from perception.contact.distance_provider import (
     DistanceProvider,
@@ -153,6 +161,9 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         help="Run in headless mode without graphical window display",
     )
 
+    # Readiness Criteria Selection arguments
+    add_criteria_arguments(parser)
+
     parsed = parser.parse_args(args)
 
     if parsed.conf is not None and not (0.0 <= parsed.conf <= 1.0):
@@ -161,6 +172,9 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         parser.error(f"--distance must be non-negative, got {parsed.distance}")
     if parsed.max_frames is not None and parsed.max_frames <= 0:
         parser.error(f"--max-frames must be positive, got {parsed.max_frames}")
+
+    # Validate and resolve criteria selection
+    parsed.criteria_selection = resolve_criteria_selection(parsed, parser)
 
     return parsed
 
@@ -249,9 +263,16 @@ def render_contact_overlays(
     temporal_ms: float,
     contact_ms: float,
     distance_obs: Optional[DistanceObservation],
+    criteria_selection: Optional[CriteriaSelection] = None,
 ) -> None:
     """Render full diagnostic visual overlays, checklists, and state banners."""
     h_canvas, w_canvas = canvas.shape[:2]
+
+    if criteria_selection is None:
+        if result.selected_criteria:
+            criteria_selection = CriteriaSelection(frozenset(result.selected_criteria))
+        else:
+            criteria_selection = CriteriaSelection.all()
 
     # 1. Draw Interaction Zone Polygon
     if len(zone_vertices_px) >= 3:
@@ -313,10 +334,25 @@ def render_contact_overlays(
     draw_text_with_background(canvas, lat_txt, (hud_x, hud_y), scale=0.38, color=(200, 200, 200))
     hud_y += line_h + 3
 
-    # Section B: Readiness State Banner
+    # Section B: Mode Banner (Default Production vs All 7 vs Custom Subset)
+    if criteria_selection.is_all:
+        mode_txt = "MODE: FULL M6 FIRST-CONTACT (ALL 7)"
+        mode_col = (0, 255, 255)  # Cyan
+    elif criteria_selection.selected_numbers == DEFAULT_CRITERIA_NUMBERS:
+        mode_txt = "MODE: PRODUCTION FIRST-CONTACT ({1, 2, 7} [P, B, O])"
+        mode_col = (0, 255, 0)  # Bright Green for default production mode
+    else:
+        sel_nums = ",".join(str(n) for n in criteria_selection.sorted_numbers)
+        sel_ids = ", ".join(CRITERION_DETAILS[n]["id"] for n in criteria_selection.sorted_numbers)
+        mode_txt = f"MODE: EXPERIMENTAL GATE (Selected: {{{sel_nums}}} [{sel_ids}])"
+        mode_col = (0, 180, 255)  # Amber
+
+    draw_text_with_background(canvas, mode_txt, (hud_x, hud_y), scale=0.44, color=mode_col)
+    hud_y += line_h
+
+    # Section C: Readiness State Banner & Timer Progress
     v_id = result.visit_id if result.visit_id is not None else "-"
     t_id = result.track_id if result.track_id is not None else "-"
-    state_str = result.state.value
 
     if result.state == ReadinessState.READY:
         banner_txt = f"STATE: [ READY ] | Visit: {v_id} | Track: {t_id}"
@@ -331,47 +367,80 @@ def render_contact_overlays(
     draw_text_with_background(canvas, banner_txt, (hud_x, hud_y), scale=0.48, color=banner_col)
     hud_y += line_h + 3
 
-    # Section C: 7-Predicate Checklist
+    # Section D: 7-Criteria Live Checklist
     preds = result.predicates
-    draw_text_with_background(canvas, "-- Seven Required Readiness Predicates --", (hud_x, hud_y), scale=0.42, color=(220, 220, 220))
+    draw_text_with_background(
+        canvas,
+        "-- Criteria: [SEL]=Active Gate, [---]=Passive --",
+        (hud_x, hud_y),
+        scale=0.41,
+        color=(220, 220, 220),
+    )
     hud_y += line_h
 
-    def _fmt_p(flag: bool, label: str) -> tuple[str, tuple[int, int, int]]:
-        sym = "[+]" if flag else "[-]"
-        col = COLOR_VALID if flag else COLOR_INVALID
-        return f" {sym} {label}", col
-
-    checklist = [
-        _fmt_p(preds.p_presence, "P: Person Presence Valid"),
-        _fmt_p(preds.b_bbox, "B: BBox Matched to Active Track"),
-        _fmt_p(preds.a_approach, "A: Confirmed Approach / Init Presence"),
-        _fmt_p(preds.z_zone, "Z: Interaction Zone (INSIDE)"),
-        _fmt_p(preds.d_distance, f"D: Distance Valid (<= 1.5m)"),
-        _fmt_p(preds.s_stationary, "S: Stationary Behaviour (< 20px/s)"),
-        _fmt_p(preds.o_orientation, "O: Facing Robot (< yaw threshold)"),
+    dist_val_str = f"{distance_obs.distance_m:.1f}m" if distance_obs is not None else "no data"
+    criteria_items = [
+        (1, "P", "Person presence", preds.p_presence, "detected" if preds.p_presence else "none"),
+        (2, "B", "BBox valid", preds.b_bbox, "matched" if preds.b_bbox else "unmatched"),
+        (3, "A", "Approach/init", preds.a_approach, "confirmed" if preds.a_approach else "unconfirmed"),
+        (4, "Z", "Interaction zone", preds.z_zone, "inside" if preds.z_zone else "outside"),
+        (5, "D", "Distance <=1.5m", preds.d_distance, dist_val_str),
+        (6, "S", "Stationary", preds.s_stationary, "stable" if preds.s_stationary else "moving"),
+        (7, "O", "Facing robot", preds.o_orientation, "facing" if preds.o_orientation else "turned"),
     ]
 
-    for item_txt, col in checklist:
+    for num, cid, name, is_sat, val_str in criteria_items:
+        is_sel = criteria_selection.is_selected(num)
+        tag = "[SEL]" if is_sel else "[---]"
+        sym = "[+]" if is_sat else "[-]"
+
+        if is_sel:
+            col = COLOR_VALID if is_sat else COLOR_INVALID
+            passive_suffix = ""
+        else:
+            col = (150, 150, 150)  # Muted gray for passive / unselected criteria
+            passive_suffix = " (passive)"
+
+        item_txt = f" {sym} {tag} {num}. {cid} - {name} ({val_str}){passive_suffix}"
         draw_text_with_background(canvas, item_txt, (hud_x, hud_y), scale=0.40, color=col)
         hud_y += line_h
 
-    # Section D: Reasons when NOT_READY
+    # Section E: Relevant Failure Reasons for Unsatisfied Selected Criteria
     if result.state == ReadinessState.NOT_READY and result.reasons:
         hud_y += 3
-        reasons_str = ", ".join(r.value for r in result.reasons[:3])
-        draw_text_with_background(canvas, f"Unsatisfied: {reasons_str}", (hud_x, hud_y), scale=0.40, color=(0, 165, 255))
+        reasons_str = ", ".join(r.value for r in result.reasons[:4])
+        draw_text_with_background(
+            canvas,
+            f"Unsatisfied (Selected): {reasons_str}",
+            (hud_x, hud_y),
+            scale=0.40,
+            color=(0, 165, 255),
+        )
         hud_y += line_h
 
-    # Section E: Event Notification Banner
+    # Section F: Event Notification Banner
     if result.event is not None:
-        evt_txt = f"*** EVENT EMITTED: {result.event.event_type} (id={result.event.event_id}) ***"
+        if isinstance(result.event, FirstContactReadyEvent):
+            evt_txt = f"*** EVENT: FIRST_CONTACT_READY (id={result.event.event_id}) ***"
+            evt_col = (0, 255, 0)
+            evt_bg = (0, 80, 0)
+        elif isinstance(result.event, DemoCriteriaReadyEvent):
+            sel_str = ",".join(str(n) for n in result.event.selected_criteria)
+            evt_txt = f"*** DEMO EVENT: DEMO_CRITERIA_READY (id={result.event.event_id}, criteria={{{sel_str}}}) ***"
+            evt_col = (0, 215, 255)
+            evt_bg = (0, 70, 100)
+        else:
+            evt_txt = f"*** EVENT EMITTED: {result.event.event_type} (id={result.event.event_id}) ***"
+            evt_col = (0, 255, 0)
+            evt_bg = (0, 80, 0)
+
         draw_text_with_background(
             canvas,
             evt_txt,
             (hud_x, h_canvas - 25),
-            scale=0.52,
-            color=(0, 255, 0),
-            bg_color=(0, 80, 0),
+            scale=0.50,
+            color=evt_col,
+            bg_color=evt_bg,
         )
 
 
@@ -381,6 +450,11 @@ def run_first_contact_pipeline(args: argparse.Namespace) -> int:
     m4_config = load_readiness_config(args.config)
     temporal_config = load_temporal_config(args.temporal_config)
     contact_config = load_contact_config(args.contact_config)
+
+    # Active criteria selection
+    criteria_sel = getattr(args, "criteria_selection", None)
+    if criteria_sel is None:
+        criteria_sel = CriteriaSelection.default()
 
     # Apply overrides
     camera_dev = args.camera if args.camera is not None else m4_config.camera.device
@@ -405,6 +479,7 @@ def run_first_contact_pipeline(args: argparse.Namespace) -> int:
     print(f" Camera Device:       {camera_dev}")
     print(f" YOLO Model:          {model_path} (conf >= {conf_thresh:.2f})")
     print(f" Face Landmarker:     {face_model_path}")
+    print(f" Criteria Mode:       {criteria_sel.format_summary()}")
     print(f" Distance Mode:       {contact_config.distance_mode.upper()} (threshold <= {contact_config.distance_max_m:.2f} m)")
     print(f" Eligibility Window:  {contact_config.eligibility_duration_seconds:.1f} s continuous")
     print(f" Tracking Loss Grace: {contact_config.tracking_loss_timeout_seconds:.1f} s")
@@ -454,10 +529,11 @@ def run_first_contact_pipeline(args: argparse.Namespace) -> int:
     print("Initializing DistanceProvider (M6)...")
     distance_provider = create_distance_provider(contact_config)
 
-    print("Initializing ReadinessEngine (M6)...")
+    print(f"Initializing ReadinessEngine (M6) [{criteria_sel.format_summary()}]...")
     readiness_engine = ReadinessEngine(
         config=contact_config,
         distance_provider=distance_provider,
+        criteria_selection=criteria_sel,
     )
 
     # 3. Open Camera
@@ -570,7 +646,7 @@ def run_first_contact_pipeline(args: argparse.Namespace) -> int:
 
             if result.event is not None:
                 emitted_events_count += 1
-                print(f"\n[FIRST_CONTACT_READY EVENT] Frame {total_frames}: {result.event.to_dict()}")
+                print(f"\n[{result.event.event_type} EVENT] Frame {total_frames}: {result.event.to_dict()}")
 
             # Resource utilization sampling
             try:
@@ -594,6 +670,7 @@ def run_first_contact_pipeline(args: argparse.Namespace) -> int:
                     temporal_ms=t_temp_ms,
                     contact_ms=t_m6_ms,
                     distance_obs=dist_obs,
+                    criteria_selection=criteria_sel,
                 )
                 cv2.imshow(WINDOW_NAME, frame)
                 key = cv2.waitKey(1) & 0xFF

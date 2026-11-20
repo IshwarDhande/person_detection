@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# activation script for detection project using interrupt venv
+# Activation script for Vision-Based First Contact
 
-source /home/eshwar/code/interrupt/venv/bin/activate
-export PYTHONPATH="/home/eshwar/code/detection:${PYTHONPATH:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"
 
-echo "activated virtual environment: /home/eshwar/code/interrupt/venv"
-echo "python interpreter: $(which python) ($(python --version))"
+if [ -d "${SCRIPT_DIR}/.venv" ]; then
+    source "${SCRIPT_DIR}/.venv/bin/activate"
+elif [ -d "${SCRIPT_DIR}/venv" ]; then
+    source "${SCRIPT_DIR}/venv/bin/activate"
+elif [ -f "/home/eshwar/code/interrupt/venv/bin/activate" ]; then
+    source "/home/eshwar/code/interrupt/venv/bin/activate"
+fi
 
+echo "Activated environment. Python: $(which python3) ($(python3 --version))"
+echo "PYTHONPATH set to: ${PYTHONPATH}"

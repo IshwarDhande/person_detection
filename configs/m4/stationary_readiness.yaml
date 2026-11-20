@@ -9,7 +9,7 @@ camera:
   fourcc: "MJPG"
 
 detector:
-  model_path: "yolov8n.pt"
+  model_path: "models/yolov8n.pt"
   confidence_threshold: 0.50
   class_id: 0
 
@@ -29,8 +29,8 @@ interaction_zone:
   enabled: true
   coordinate_system: "normalized"   # Normalized coordinates [0.0, 1.0] relative to frame width and height
   vertices:
-    - [0.23, 0.28]
-    - [0.77, 0.28]
-    - [0.90, 0.90]
-    - [0.10, 0.90]
+    - [0.05, 0.05]
+    - [0.95, 0.05]
+    - [0.95, 0.95]
+    - [0.05, 0.95]
 

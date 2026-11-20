@@ -224,16 +224,72 @@ cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/
 
 ## Milestone M6 — Readiness-Based Single-Person First Contact Demo
 
-The following commands launch and evaluate the Milestone M6 complete perception-to-first-contact pipeline.
+The following commands launch and evaluate the Milestone M6 complete perception-to-first-contact pipeline with configurable criteria selection.
 
-### 1. Quick Start (Interactive Live Demo)
-Runs the complete end-to-end first-contact pipeline on `/dev/video0` with real-time HUD, readiness state badge, predicate checklist, distance indicator, and one-shot event logger:
+### Criteria Mapping & Fixed Identifiers
+
+The seven readiness criteria and their stable identifiers are:
+
+| Number | ID | Criterion | Implementation Attribute |
+|---|---|---|---|
+| 1 | P | Person presence | `preds.p_presence` |
+| 2 | B | Bounding-box validity | `preds.b_bbox` |
+| 3 | A | Approach / initial presence | `preds.a_approach` |
+| 4 | Z | Interaction-zone membership | `preds.z_zone` |
+| 5 | D | Distance | `preds.d_distance` |
+| 6 | S | Stationary | `preds.s_stationary` |
+| 7 | O | Facing robot | `preds.o_orientation` |
+
+### Criteria Selection Modes
+
+The runner supports selecting which criteria participate in the eligibility gate:
+- **Default Selection (no flags):** `{1, 2, 7}` (`P, B, O`) — Person presence, Bounding box valid, Facing robot.
+- **`--all`:** `{1, 2, 3, 4, 5, 6, 7}` — Full M6 production first-contact readiness.
+- **`--stationary`:** `{1, 2, 4, 7}` (`P, B, Z, O`) — Stationary readiness conditions (presence, bbox, interaction zone, facing robot).
+- **`--temporal`:** `{3, 6}` (`A, S`) — Approach and stationary movement criteria.
+- **`--criteria <list>`:** Explicit comma-separated criterion numbers (e.g. `--criteria 1,2,6` or `--criteria 1,2,3,4,5,6,7`).
+
+> [!IMPORTANT]
+> **Production vs Demo Event Emission:**
+> - **Production First-Contact Gate (`FIRST_CONTACT_READY`):** Emitted for both the default production criteria `{1, 2, 7}` (`P, B, O`) and full all-seven criteria `{1, 2, 3, 4, 5, 6, 7}` (`--all`).
+> - **Experimental Demo Gate (`DEMO_CRITERIA_READY`):** Emitted only when non-default experimental subsets are selected (such as `--temporal` `{3, 6}`, `--stationary` `{1, 2, 4, 7}`, or custom `--criteria`). Includes the `selected_criteria` payload.
+
+### 1. Quick Start (Default Criteria: {1, 2, 7})
+Runs the demo with default readiness criteria (`{1, 2, 7}`: presence, bbox validity, and facing robot):
 ```bash
 cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 perception/contact/run_first_contact_demo.py
 ```
 > *Press `q` or `Esc` inside the camera window to exit.*
 
-### 2. Full Parameter Launch (Explicit Options)
+### 2. Full M6 Production Gate (--all)
+Runs the demo with all 7 criteria required for readiness (emits `FIRST_CONTACT_READY` on 2.0s continuous validity):
+```bash
+cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 perception/contact/run_first_contact_demo.py \
+  --all
+```
+
+### 3. Stationary Alias Launch (--stationary)
+Runs with criteria `{1, 2, 4, 7}` (presence, bbox, zone membership, facing robot):
+```bash
+cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 perception/contact/run_first_contact_demo.py \
+  --stationary
+```
+
+### 4. Temporal Alias Launch (--temporal)
+Runs with criteria `{3, 6}` (approach and stationary movement):
+```bash
+cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 perception/contact/run_first_contact_demo.py \
+  --temporal
+```
+
+### 5. Explicit Criteria Launch (--criteria)
+Runs with custom selected criteria numbers, e.g. `{1, 2, 6}`:
+```bash
+cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 perception/contact/run_first_contact_demo.py \
+  --criteria 1,2,6
+```
+
+### 6. Full Parameter Launch (Explicit Options)
 Runs live first contact with custom configurations, override mock distance, compute device, and camera parameters:
 ```bash
 PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 /home/eshwar/code/detection/perception/contact/run_first_contact_demo.py \
@@ -245,26 +301,34 @@ PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 /home/eshwar/code/dete
   --face-model /home/eshwar/code/detection/models/face_landmarker.task \
   --conf 0.5 \
   --distance 1.2 \
-  --device cpu
+  --device cpu \
+  --all
 ```
 
-### 3. Headless Profiling Run (Bounded Frames)
+### 7. Headless Profiling Run (Bounded Frames)
 Runs the complete perception pipeline without graphical window display to benchmark component latencies and resource usage:
 ```bash
 cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 perception/contact/run_first_contact_demo.py \
   --camera /dev/video0 \
   --headless \
-  --max-frames 100
+  --max-frames 100 \
+  --stationary
 ```
 
-### 4. M6 Dedicated Unit Test Suite
-Executes all 97 dedicated M6 unit tests covering predicate evaluation, continuous eligibility timer, readiness state machine, target locking, tracking-loss grace periods, reacquisition, and synthetic interaction scenarios:
+### 8. M6 Dedicated Unit Test Suite
+Executes all 142 dedicated M6 unit tests covering predicate evaluation, continuous eligibility timer, readiness state machine, criteria selection, target locking, tracking-loss grace periods, reacquisition, and synthetic interaction scenarios:
 ```bash
 cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 -m unittest discover -s tests/perception/contact -t . -v
 ```
 
-### 5. Full Repository Test Suite (M1–M6)
-Executes all 328 unit tests across all milestones (M1–M6) to verify zero regressions:
+### 9. Interaction Subsystem Unit Test Suite
+Executes all 9 unit tests for the interaction module (`interaction/mock_interaction_receiver.py`):
+```bash
+cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 -m unittest discover -s tests/interaction -t . -v
+```
+
+### 10. Full Repository Test Suite (M1–M6 + Interaction)
+Executes all 382 unit tests across all milestones and modules to verify 100% test pass and zero regressions:
 ```bash
 cd /home/eshwar/code/detection && PYTHONPATH=. /home/eshwar/code/interrupt/venv/bin/python3 -m unittest discover -s tests -t . -v
 ```

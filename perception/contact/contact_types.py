@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import math
-from typing import Any, Optional
+from typing import Any, Optional, Sequence, Union
 import uuid
 
 from perception.readiness.observation_types import ObservationStatus
@@ -152,6 +152,50 @@ class FirstContactReadyEvent:
 
 
 @dataclass(frozen=True)
+class DemoCriteriaReadyEvent:
+    """Structured one-shot event emitted when selected demo criteria achieve continuous readiness.
+
+    Used exclusively for experimental/demo subset readiness evaluation; never emitted
+    when full M6 production criteria ({1..7}) are required.
+    """
+
+    event_id: str
+    visit_id: str
+    track_id: int
+    timestamp: float
+    readiness_duration: float
+    distance: DistanceInfo
+    selected_criteria: tuple[int, ...]
+    event_type: str = "DEMO_CRITERIA_READY"
+    utc_timestamp: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.readiness_duration) or self.readiness_duration <= 0.0:
+            raise ValueError(
+                f"readiness_duration must be a positive finite float, got {self.readiness_duration}"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert event to structured dictionary representation."""
+        data: dict[str, Any] = {
+            "event_type": self.event_type,
+            "event_id": self.event_id,
+            "visit_id": self.visit_id,
+            "track_id": self.track_id,
+            "timestamp": self.timestamp,
+            "readiness_duration": self.readiness_duration,
+            "distance": {
+                "value_m": self.distance.value_m,
+                "source": self.distance.source,
+            },
+            "selected_criteria": list(self.selected_criteria),
+        }
+        if self.utc_timestamp is not None:
+            data["utc_timestamp"] = self.utc_timestamp
+        return data
+
+
+@dataclass(frozen=True)
 class ReadinessPredicates:
     """Evaluation status of the seven required readiness conditions:
     E = P & B & A & Z & D & S & O.
@@ -186,6 +230,21 @@ class ReadinessPredicates:
             and self.s_stationary
             and self.o_orientation
         )
+
+    def is_selected_valid(
+        self, selected_criteria: frozenset[int] | set[int] | Sequence[int]
+    ) -> bool:
+        """Evaluate whether all specified criterion numbers (1..7) are satisfied."""
+        pred_map = {
+            1: self.p_presence,
+            2: self.b_bbox,
+            3: self.a_approach,
+            4: self.z_zone,
+            5: self.d_distance,
+            6: self.s_stationary,
+            7: self.o_orientation,
+        }
+        return all(pred_map.get(num, False) for num in selected_criteria)
 
     @property
     def P(self) -> bool:
@@ -227,10 +286,10 @@ class ReadinessPredicates:
 class ContactTimings:
     """Execution latency breakdown in milliseconds for M6 decision operations."""
 
-    predicate_eval_ms: float
-    visit_management_ms: float
-    state_machine_ms: float
-    total_ms: float
+    predicate_eval_ms: float = 0.0
+    visit_management_ms: float = 0.0
+    state_machine_ms: float = 0.0
+    total_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -250,11 +309,12 @@ class FirstContactResult:
     """
 
     state: ReadinessState
-    event: Optional[FirstContactReadyEvent]
+    event: Optional[Union[FirstContactReadyEvent, DemoCriteriaReadyEvent]]
     predicates: ReadinessPredicates
     reasons: list[ReasonCode]
     visit_id: Optional[str]
     track_id: Optional[int]
     elapsed_eligibility: float
-    distance: Optional[DistanceObservation]
-    timings: ContactTimings
+    distance: Optional[DistanceObservation] = None
+    timings: ContactTimings = field(default_factory=ContactTimings)
+    selected_criteria: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7)
